@@ -207,7 +207,7 @@ class musgconvDataset(object):
         Specifying the directory that will store the
         downloaded data or the directory that
         already stores the input data.
-        Default: ~/.MusGConv/
+        Default: ~/.musgconv/
     save_dir : str
         Directory to save the processed dataset.
         Default: same as raw_dir
@@ -288,9 +288,9 @@ class musgconvDataset(object):
         """Overwite to realize your own logic of
         loading the saved dataset from files.
 
-        It is recommended to use ``MusGConv.utils.load_graph_from_part``
-        to load MusGConv Score graph from files and use
-        ``MusGConv.utils.load_info`` to load extra information
+        It is recommended to use ``musgconv.utils.load_graph_from_part``
+        to load musgconv Score graph from files and use
+        ``musgconv.utils.load_info`` to load extra information
         into python dict object.
         """
         pass
@@ -432,7 +432,7 @@ class BuiltinDataset(musgconvDataset):
         Specifying the directory that will store the
         downloaded data or the directory that
         already stores the input data.
-        Default: ~/.MusGConv/
+        Default: ~/.musgconv/
     hash_key : tuple
         A tuple of values as the input for the hash function.
         Users can distinguish instances (and their caches on the disk)

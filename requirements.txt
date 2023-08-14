@@ -2,7 +2,9 @@ tqdm
 scikit-learn
 scikit-image
 matplotlib
-requests
-git
+pandas
+gitpython
 pytorch-lightning
 partitura
+wandb
+music21

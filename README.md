@@ -9,14 +9,16 @@ Please install the version of torch that is compatible with your machine prefera
 
 Use the following command to install torch with conda:
 ```shell
-conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch
+conda create -n musgconv python=3.8
+conda activate musgconv
+conda install pytorch cudatoolkit=<your version of cuda> -c pytorch
 ```
-Similarly make sure to instal [pytorch-sparse](https://github.com/rusty1s/pytorch_sparse)
+Similarly, make sure to install [Pytorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html)
 
 
 To install the rest of the requirements with pip do:
 ```shell
-cd Path/to/MusGConv
+cd Path/to/musgconv
 pip install -r requirements.txt
 ```
 

@@ -1,0 +1,8 @@
+tqdm
+scikit-learn
+scikit-image
+matplotlib
+requests
+git
+pytorch-lightning
+partitura

@@ -7,6 +7,94 @@ from musgconv.metrics.eval import MultitaskAccuracy
 import pandas as pd
 from musgconv.models.core.hgnn import MetricalGNN
 from musgconv.utils import add_reverse_edges_from_edge_index
+from musgconv.utils import METADATA
+from musgconv.models.core.hgnn import HeteroMusGConv
+from torch_geometric.nn import to_hetero, SAGEConv, GATConv
+
+
+class HeteroSageEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata=METADATA, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(to_hetero(SAGEConv(in_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        if n_layers > 1:
+            for i in range(n_layers-1):
+                self.layers.append(to_hetero(SAGEConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
+
+
+class HeteroGATEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(to_hetero(GATConv(in_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        if n_layers > 1:
+            for i in range(n_layers - 1):
+                self.layers.append(to_hetero(GATConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
+
+
+class HeteroMusGConvEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.in_edge_features = kwargs.get("in_edge_features", 0)
+        self.return_edge_emb = kwargs.get("return_edge_emb", False)
+        self.layers = nn.ModuleList()
+        self.layers.append(HeteroMusGConv(in_channels, out_channels, metadata, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb))
+        if n_layers > 2:
+            for i in range(n_layers - 2):
+                self.layers.append(HeteroMusGConv(
+                    out_channels, out_channels, metadata,
+                    in_edge_features=(out_channels if self.return_edge_emb else 0),
+                    return_edge_emb=self.return_edge_emb))
+        self.layers.append(HeteroMusGConv(out_channels, out_channels, metadata, in_edge_features=(out_channels if self.return_edge_emb else 0), return_edge_emb=False))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            if self.return_edge_emb:
+                x_dict, edge_feature_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            else:
+                x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+                edge_feature_dict = {k: None for k in edge_feature_dict.keys()}
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
 
 
 class MultiTaskLoss(nn.Module):
@@ -405,21 +493,21 @@ class MetricalChordEncoder(nn.Module):
         # self.embedding = nn.Linear(in_feats-1, n_hidden)
         pitch_embeddding = kwargs.get("pitch_embedding", 0)
         pitch_embeddding = 0 if pitch_embeddding is None else pitch_embeddding
+        return_edge_emb = kwargs.get("return_edge_emb", False)
         block = kwargs.get("conv_block", "SageConv")
         if block == "ResConv":
             conv_block = ResGatedGraphConv
         elif block == "SageConv" or block == "Sage" or block is None:
-            conv_block = SageConvScatter
+            self.encoder = HeteroSageEncoder(64+pitch_embeddding, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation)
         elif block == "GAT" or block == "GATConv":
-            conv_block = GATConvLayer
+            self.encoder = HeteroGATEncoder(64+pitch_embeddding, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation)
         elif block == "RelEdgeConv":
-            conv_block = RelEdgeConv
+            self.encoder = HeteroMusGConvEncoder(64+pitch_embeddding, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation,
+                                               in_edge_features=pitch_embeddding, return_edge_emb=return_edge_emb)
         else:
             raise ValueError("Block type not supported")
-        kwargs["conv_block"] = conv_block
-        self.encoder = MetricalGNN(64, n_hidden, n_hidden, self.etypes, n_layers, dropout=dropout, jk=use_jk,
-                                   in_edge_features=3+pitch_embeddding, metrical=metrical, use_reledge=use_reledge,
-                                   **kwargs)
+        kwargs["conv_block"] = block
+
         # self.encoder = HResGatedConv(64, n_hidden*2, n_hidden, n_layers, activation=activation, dropout=dropout, jk=use_jk)
         #
         # self.encoder = HeteroResGatedGraphConvLayer(n_hidden, n_hidden, etypes=self.etypes, reduction="none")
@@ -447,12 +535,14 @@ class MetricalChordEncoder(nn.Module):
         self.encoder.reset_parameters()
         self.pool.reset_parameters()
 
-    def forward(self, x, edge_index, edge_type, onset_index, onset_idx, lengths, **kwargs):
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, onset_index, onset_idx, lengths, **kwargs):
+        x = x_dict["note"]
         h_pitch = self.pitch_embedding(x[:, 0].long())
         h_spelling = self.spelling_embedding(x[:, 1].long())
         h = self.embedding(x[:, 2:-1])
         h = torch.cat([h, h_pitch, h_spelling], dim=-1)
-        h = self.encoder(h, edge_index, edge_type, **kwargs)
+        x_dict = {"note": h}
+        h = self.encoder(x_dict, edge_index_dict, edge_feature_dict, **kwargs)
         h = F.normalize(self.activation(h))
         h, idx = self.pool(h, onset_index, onset_idx)
         h = torch.cat([h, x[:, -1][idx].unsqueeze(-1)], dim=-1)
@@ -491,17 +581,17 @@ class MetricalChordPredictionModel(nn.Module):
         else:
             self.classifier = MultiTaskMLP(n_hidden, n_hidden, tasks=tasks, n_layers=1, activation=activation, dropout=dropout)
 
-    def forward(self, x, edge_index, edge_type, onset_edges, onset_idx, lengths, **kwargs):
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, onset_edges, onset_idx, lengths, **kwargs):
         """
         Forward pass of the model.
 
         Parameters
         ----------
-        x: torch.Tensor
+        x_dict: torch.Tensor
             (n_nodes, n_feats)
-        edge_index: Long Tensor
+        edge_index_dict: Long Tensor
             (2, n_edges)
-        edge_type: Long Tensor
+        edge_feature_dict: Long Tensor
             (n_edges, )
         onset_edges: Long Tensor
             (2, n_onset_edges)
@@ -519,7 +609,7 @@ class MetricalChordPredictionModel(nn.Module):
             (2, n_measure_edges)
 
         """
-        h = self.encoder(x, edge_index, edge_type, onset_edges, onset_idx, lengths=lengths, **kwargs)
+        h = self.encoder(x_dict, edge_index_dict, edge_feature_dict, onset_edges, onset_idx, lengths=lengths, **kwargs)
         prediction = self.classifier(h)
         return prediction
 
@@ -1098,16 +1188,12 @@ class MetricalChordPrediction(LightningModule):
             pitch = self.pitch_embedding(torch.remainder(na[:, 0][edges[0]] - na[:, 0][edges[1]], 12).long())
             edge_features = torch.cat([edge_features, pitch], dim=1)
 
-        beat_nodes = batch["beat_nodes"] if "beat_nodes" in batch.keys() else None
-        measure_nodes = batch["measure_nodes"] if "measure_nodes" in batch.keys() else None
-        beat_edges = batch["beat_edges"] if "beat_edges" in batch.keys() else None
-        measure_edges = batch["measure_edges"] if "measure_edges" in batch.keys() else None
-        beat_lengths = batch["beat_lengths"] if "beat_lengths" in batch.keys() else None
-        measure_lengths = batch["measure_lengths"] if "measure_lengths" in batch.keys() else None
-        batch_pred = self.module(batch["x"], edges, edge_types, onset_edges, onset_idx,
-                                 lengths=batch["lengths"], beat_nodes=beat_nodes, beat_edges=beat_edges,
-                                 measure_nodes=measure_nodes, measure_edges=measure_edges, rel_edge=edge_features,
-                                 beat_lengths=beat_lengths, measure_lengths=measure_lengths)
+        x_dict = {"note": batch["x"]}
+        edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
+                             METADATA[1]} if edge_features is not None else None
+        batch_pred = self.module(x_dict, edge_index_dict, edge_feature_dict, onset_edges, onset_idx,
+                                 lengths=batch["lengths"])
 
         batch_labels = {k: v.reshape(-1) for k, v in batch["y"].items()}
         loss = self.train_loss(batch_pred, batch_labels)
@@ -1139,16 +1225,12 @@ class MetricalChordPrediction(LightningModule):
         if self.pitch_embedding is not None and edge_features is not None:
             pitch = self.pitch_embedding(torch.remainder(na[:, 0][edges[0]] - na[:, 0][edges[1]], 12).long())
             edge_features = torch.cat([edge_features, pitch], dim=1)
-        beat_nodes = batch["beat_nodes"] if "beat_nodes" in batch.keys() else None
-        measure_nodes = batch["measure_nodes"] if "measure_nodes" in batch.keys() else None
-        beat_edges = batch["beat_edges"] if "beat_edges" in batch.keys() else None
-        measure_edges = batch["measure_edges"] if "measure_edges" in batch.keys() else None
-        beat_lengths = batch["beat_lengths"] if "beat_lengths" in batch.keys() else None
-        measure_lengths = batch["measure_lengths"] if "measure_lengths" in batch.keys() else None
-        batch_pred = self.module(batch["x"], edges, edge_types, onset_edges, onset_idx,
-                                 lengths=None, beat_nodes=beat_nodes, beat_edges=beat_edges,
-                                 measure_nodes=measure_nodes, measure_edges=measure_edges, rel_edge=edge_features,
-                                 beat_lengths=beat_lengths, measure_lengths=measure_lengths)
+        x_dict = {"note": batch["x"]}
+        edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
+                             METADATA[1]} if edge_features is not None else None
+        batch_pred = self.module(x_dict, edge_index_dict, edge_feature_dict, onset_edges, onset_idx,
+                                 lengths=batch["lengths"])
         batch_labels = batch["y"]
         loss = self.val_loss(batch_pred, batch_labels)
         self.log('val_loss', loss["total"].item(), on_step=False, on_epoch=True, prog_bar=True, batch_size=1)
@@ -1177,16 +1259,12 @@ class MetricalChordPrediction(LightningModule):
         if self.pitch_embedding is not None and edge_features is not None:
             pitch = self.pitch_embedding(torch.remainder(na[:, 0][edges[0]] - na[:, 0][edges[1]], 12).long())
             edge_features = torch.cat([edge_features, pitch], dim=1)
-        beat_nodes = batch["beat_nodes"] if "beat_nodes" in batch.keys() else None
-        measure_nodes = batch["measure_nodes"] if "measure_nodes" in batch.keys() else None
-        beat_edges = batch["beat_edges"] if "beat_edges" in batch.keys() else None
-        measure_edges = batch["measure_edges"] if "measure_edges" in batch.keys() else None
-        beat_lengths = batch["beat_lengths"] if "beat_lengths" in batch.keys() else None
-        measure_lengths = batch["measure_lengths"] if "measure_lengths" in batch.keys() else None
-        batch_pred = self.module(batch["x"], edges, edge_types, onset_edges, onset_idx,
-                                 lengths=None, beat_nodes=beat_nodes, beat_edges=beat_edges,
-                                 measure_nodes=measure_nodes, measure_edges=measure_edges, rel_edge=edge_features,
-                                 beat_lengths=beat_lengths, measure_lengths=measure_lengths)
+        x_dict = {"note": batch["x"]}
+        edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
+                             METADATA[1]} if edge_features is not None else None
+        batch_pred = self.module(x_dict, edge_index_dict, edge_feature_dict, onset_edges, onset_idx,
+                                 lengths=batch["lengths"])
         batch_labels = batch["y"]
         acc = self.test_acc(batch_pred, batch_labels)
         for task in self.tasks.keys():

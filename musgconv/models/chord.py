@@ -5,7 +5,6 @@ from torch_scatter import scatter_add
 from pytorch_lightning import LightningModule
 from musgconv.metrics.eval import MultitaskAccuracy
 import pandas as pd
-import rotograd
 from musgconv.models.core.hgnn import MetricalGNN
 from musgconv.utils import add_reverse_edges_from_edge_index
 
@@ -624,36 +623,11 @@ class ChordPrediction(LightningModule):
                  ):
         super(ChordPrediction, self).__init__()
         self.tasks = tasks
-        self.use_rotograd = use_rotograd
         self.save_hyperparameters()
         self.num_tasks = len(tasks.keys())
         self.module = ChordPredictionModel(
             in_feats, n_hidden, tasks, n_layers, activation, dropout,
             use_nade=use_nade, use_jk=use_jk).float().to(self.device)
-        if self.use_rotograd:
-            from rotograd import RotoGrad, cached
-            device = torch.device(device if torch.cuda.is_available() else "cpu")
-            self.module = RotoGrad(
-                backbone=self.module.encoder.to(device),
-                heads=[self.module.classifier.classifier[task].to(device) for task in tasks.keys()],
-                latent_size=n_hidden,
-                normalize_losses=True
-            ).to(device)
-            weight_loss = False
-            self.automatic_optimization = False
-        if use_gradnorm:
-            from rotograd import RotoGradNorm, cached
-            device = torch.device(device if torch.cuda.is_available() else "cpu")
-            self.module = RotoGradNorm(
-                alpha=1.5,
-                backbone=self.module.encoder.to(device),
-                heads=[self.module.classifier.classifier[task].to(device) for task in tasks.keys()],
-                latent_size=n_hidden,
-                normalize_losses=True
-            ).to(device)
-            weight_loss = False
-            self.use_rotograd = True
-            self.automatic_optimization = False
         self.lr = lr
         self.weight_decay = weight_decay
         self.test_roman = list()
@@ -662,8 +636,6 @@ class ChordPrediction(LightningModule):
             list(tasks.keys()), nn.ModuleDict({task: nn.CrossEntropyLoss(ignore_index=-1) for task in tasks.keys()}), requires_grad=weight_loss)
         self.val_loss = MultiTaskLoss(
             list(tasks.keys()), nn.ModuleDict({task: nn.CrossEntropyLoss() for task in tasks.keys()}), requires_grad=False)
-        # self.train_acc = MultitaskAccuracy(tasks)
-        # self.val_acc = MultitaskAccuracy(tasks)
         self.test_acc = MultitaskAccuracy(tasks)
 
     def training_step(self, batch, batch_idx):
@@ -672,21 +644,10 @@ class ChordPrediction(LightningModule):
         batch_size = lengths.shape[0]
         onset_edges = edges[:, edge_type == 0]
         onset_idx = unique_onsets(onset_divs)
-        if self.use_rotograd:
-            opt.zero_grad()
-            with rotograd.cached():
-                batch_pred = self.module((batch_inputs, edges, edge_type, onset_edges, onset_idx, lengths))
-                batch_pred = {k: batch_pred[i] for i, k in enumerate(self.tasks.keys())}
-                # batch_pred = {k: v.reshape(-1, v.shape[-1]) for k, v in batch_pred.items()}
-                batch_labels = {k: v.reshape(-1) for k, v in batch_labels.items()}
-                loss = self.train_loss(batch_pred, batch_labels)
-                self.module.backward([v for k, v in loss.items() if k != "total"], retain_graph=True)
-            opt.step()
-        else:
-            batch_pred = self.module((batch_inputs, edges, edge_type, onset_edges, onset_idx, lengths))
-            # batch_pred = {k: v.reshape(-1, v.shape[-1]) for k, v in batch_pred.items()}
-            batch_labels = {k: v.reshape(-1) for k, v in batch_labels.items()}
-            loss = self.train_loss(batch_pred, batch_labels)
+        batch_pred = self.module((batch_inputs, edges, edge_type, onset_edges, onset_idx, lengths))
+        # batch_pred = {k: v.reshape(-1, v.shape[-1]) for k, v in batch_pred.items()}
+        batch_labels = {k: v.reshape(-1) for k, v in batch_labels.items()}
+        loss = self.train_loss(batch_pred, batch_labels)
         self.log('train_loss', loss["total"].item(), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
         degree = torch.logical_and(
             batch_pred["degree1"].argmax(dim=1) == batch_labels["degree1"],
@@ -698,16 +659,13 @@ class ChordPrediction(LightningModule):
         acc_RomNum = (torch.cat((degree, quality, root, inversion, local_key), dim=0).sum(0) == 5).float().mean()
         self.log('Train RomNum', acc_RomNum.item(), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
         self.log("global_step", self.global_step, on_step=True, prog_bar=False, batch_size=batch_size)
-        if not self.use_rotograd:
-            return loss["total"]
+        return loss["total"]
 
     def validation_step(self, batch, batch_idx):
         batch_inputs, edges, edge_type, batch_labels, onset_divs, name = batch
         onset_edges = edges[:, edge_type == 0]
         onset_idx = unique_onsets(onset_divs)
         batch_pred = self.module((batch_inputs, edges, edge_type, onset_edges, onset_idx, None))
-        if self.use_rotograd:
-            batch_pred = {k: batch_pred[i] for i, k in enumerate(self.tasks.keys())}
         loss = self.val_loss(batch_pred, batch_labels)
         self.log('val_loss', loss["total"].item(), on_step=False, on_epoch=True, prog_bar=True, batch_size=1)
         degree = torch.logical_and(
@@ -725,8 +683,6 @@ class ChordPrediction(LightningModule):
         onset_edges = edges[:, edge_type == 0]
         onset_idx = unique_onsets(onset_divs)
         batch_pred = self.module((batch_inputs, edges, edge_type, onset_edges, onset_idx, None))
-        if self.use_rotograd:
-            batch_pred = {k: batch_pred[i] for i, k in enumerate(self.tasks.keys())}
         acc = self.test_acc(batch_pred, batch_labels)
         for task in self.tasks.keys():
             self.log(f'Test {task}', acc[task], on_epoch=True, prog_bar=True, on_step=False, batch_size=1)
@@ -803,15 +759,7 @@ class ChordPrediction(LightningModule):
             return dfout["acc"].to_numpy()
 
     def configure_optimizers(self):
-        if self.use_rotograd:
-            optimizer = torch.optim.AdamW(
-                [{'params': m.parameters()} for m in self.module._backbone + self.module.heads] +\
-                [{'params': self.module.parameters(), 'lr': self.lr}],
-                lr=self.lr,
-                weight_decay=self.weight_decay
-            )
-        else:
-            optimizer = torch.optim.AdamW([
+        optimizer = torch.optim.AdamW([
                 {'params': self.module.parameters(), "lr": self.lr, "weight_decay": self.weight_decay},
                 {'params': self.train_loss.parameters(), 'weight_decay': 0, "lr": self.lr}]
             )

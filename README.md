@@ -1,4 +1,4 @@
-# MusGConv: Music Graph Convolutions 
+# MusGConv: Music-informed Graph Convolutions 
 
 This package contains implementation of the paper _Perception-Inspired Graph Convolution for Music Understanding Tasks_
 submitted to AAAI 2024.

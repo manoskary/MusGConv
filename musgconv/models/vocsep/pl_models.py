@@ -7,7 +7,7 @@ import torch_geometric as pyg
 from pytorch_lightning import LightningModule
 from musgconv.utils.pianoroll import pr_to_voice_pred
 from musgconv.metrics.slow_eval import AverageVoiceConsistency, MonophonicVoiceF1
-from musgconv.utils import voice_from_edges
+from musgconv.utils import voice_from_edges, METADATA
 from .VoicePredGeom import PGLinkPredictionModel
 from musgconv.utils import add_reverse_edges, add_reverse_edges_from_edge_index
 from torchmetrics import F1Score
@@ -286,16 +286,11 @@ class MetricalVoiceLinkPredictionModel(VocSepLightningModule):
         if self.pitch_embedding is not None and edge_features is not None:
             pitch = self.pitch_embedding(torch.remainder(na[:, 0][edges[0]] - na[:, 0][edges[1]], 12).long())
             edge_features = torch.cat([edge_features, pitch], dim=1)
-        beat_nodes = batch["beat_nodes"] if "beat_nodes" in batch.keys() else None
-        measure_nodes = batch["measure_nodes"] if "measure_nodes" in batch.keys() else None
-        beat_edges = batch["beat_edges"] if "beat_edges" in batch.keys() else None
-        measure_edges = batch["measure_edges"] if "measure_edges" in batch.keys() else None
-        beat_lengths = batch["beat_lengths"] if "beat_lengths" in batch.keys() else None
-        measure_lengths = batch["measure_lengths"] if "measure_lengths" in batch.keys() else None
-        h = self.module.embed(batch["x"], edges, edge_types,
-                              beat_nodes=beat_nodes, measure_nodes=measure_nodes,
-                              beat_edges=beat_edges, measure_edges=measure_edges, rel_edge=edge_features,
-                              beat_lengths=beat_lengths, measure_lengths=measure_lengths)
+        x_dict = {"note": batch["x"]}
+        edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
+                             METADATA[1]} if edge_features is not None else None
+        h = self.module.embed(x_dict, edge_index_dict, edge_feature_dict)
         pos_pitch_score = self.pitch_score(pos_edges, na[:, 0])
         pos_onset_score = self.onset_score(pos_edges, na[:, 1], na[:, 2], na[:, 3], na[:, 4], na[:, 5])
         neg_pitch_score = self.pitch_score(neg_edges, na[:, 0])
@@ -337,18 +332,14 @@ class MetricalVoiceLinkPredictionModel(VocSepLightningModule):
         if self.pitch_embedding is not None and edge_features is not None:
             pitch = self.pitch_embedding(torch.remainder(na[:, 0][edges[0]] - na[:, 0][edges[1]], 12).long())
             edge_features = torch.cat([edge_features, pitch], dim=1)
-        beat_nodes = batch["beat_nodes"] if "beat_nodes" in batch.keys() else None
-        measure_nodes = batch["measure_nodes"] if "measure_nodes" in batch.keys() else None
-        beat_edges = batch["beat_edges"] if "beat_edges" in batch.keys() else None
-        measure_edges = batch["measure_edges"] if "measure_edges" in batch.keys() else None
-        beat_lengths = batch["beat_lengths"] if "beat_lengths" in batch.keys() else None
-        measure_lengths = batch["measure_lengths"] if "measure_lengths" in batch.keys() else None
+        x_dict = {"note": batch["x"]}
+        edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
+                             METADATA[1]} if edge_features is not None else None
         pitch_score = self.pitch_score(batch["potential_edges"], na[:, 0])
         onset_score = self.onset_score(batch["potential_edges"], na[:, 1], na[:, 2], na[:, 3], na[:, 4], na[:, 5])
-        batch_pred = self.module(batch["potential_edges"], batch["x"], edges, edge_types, pitch_score, onset_score,
-                                 beat_nodes=beat_nodes, measure_nodes=measure_nodes, beat_edges=beat_edges,
-                                 measure_edges=measure_edges, rel_edge=edge_features, beat_lengths=beat_lengths,
-                                 measure_lengths=measure_lengths)
+        batch_pred = self.module(x_dict, edge_index_dict, edge_feature_dict, batch["potential_edges"], pitch_score, onset_score,
+                                 )
         self.val_metric_logging_step(
             batch_pred, batch["potential_edges"], batch["truth_edges"], len(batch["x"])
         )
@@ -365,18 +356,15 @@ class MetricalVoiceLinkPredictionModel(VocSepLightningModule):
         if self.pitch_embedding is not None and edge_features is not None:
             pitch = self.pitch_embedding(torch.remainder(na[:, 0][edges[0]] - na[:, 0][edges[1]], 12).long())
             edge_features = torch.cat([edge_features, pitch], dim=1)
-        beat_nodes = batch["beat_nodes"] if "beat_nodes" in batch.keys() else None
-        measure_nodes = batch["measure_nodes"] if "measure_nodes" in batch.keys() else None
-        beat_edges = batch["beat_edges"] if "beat_edges" in batch.keys() else None
-        measure_edges = batch["measure_edges"] if "measure_edges" in batch.keys() else None
-        beat_lengths = batch["beat_lengths"] if "beat_lengths" in batch.keys() else None
-        measure_lengths = batch["measure_lengths"] if "measure_lengths" in batch.keys() else None
+        x_dict = {"note": batch["x"]}
+        edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
+                             METADATA[1]} if edge_features is not None else None
         pitch_score = self.pitch_score(batch["potential_edges"], na[:, 0])
         onset_score = self.onset_score(batch["potential_edges"], na[:, 1], na[:, 2], na[:, 3], na[:, 4], na[:, 5])
-        batch_pred = self.module(batch["potential_edges"], batch["x"], edges, edge_types, pitch_score, onset_score,
-                                 beat_nodes=beat_nodes, measure_nodes=measure_nodes, beat_edges=beat_edges,
-                                 measure_edges=measure_edges, rel_edge=edge_features, beat_lengths=beat_lengths,
-                                 measure_lengths=measure_lengths)
+        batch_pred = self.module(x_dict, edge_index_dict, edge_feature_dict, batch["potential_edges"], pitch_score,
+                                 onset_score,
+                                 )
         self.test_metric_logging_step(
             batch_pred, batch["potential_edges"], batch["truth_edges"], len(batch["x"])
         )

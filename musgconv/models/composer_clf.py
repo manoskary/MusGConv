@@ -3,6 +3,94 @@ from pytorch_lightning import LightningModule
 from musgconv.models.core.hgnn import MetricalGNN
 from musgconv.utils import add_reverse_edges_from_edge_index
 from torchmetrics import Accuracy, F1Score
+from musgconv.utils import METADATA
+from musgconv.models.core.hgnn import HeteroMusGConv
+from torch_geometric.nn import to_hetero, SAGEConv, GATConv
+
+
+class HeteroSageEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata=METADATA, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(to_hetero(SAGEConv(in_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        if n_layers > 1:
+            for i in range(n_layers-1):
+                self.layers.append(to_hetero(SAGEConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
+
+
+class HeteroGATEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(to_hetero(GATConv(in_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        if n_layers > 1:
+            for i in range(n_layers - 1):
+                self.layers.append(to_hetero(GATConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
+
+
+class HeteroMusGConvEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.in_edge_features = kwargs.get("in_edge_features", 0)
+        self.return_edge_emb = kwargs.get("return_edge_emb", False)
+        self.layers = nn.ModuleList()
+        self.layers.append(HeteroMusGConv(in_channels, out_channels, metadata, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb))
+        if n_layers > 2:
+            for i in range(n_layers - 2):
+                self.layers.append(HeteroMusGConv(
+                    out_channels, out_channels, metadata,
+                    in_edge_features=(out_channels if self.return_edge_emb else 0),
+                    return_edge_emb=self.return_edge_emb))
+        self.layers.append(HeteroMusGConv(out_channels, out_channels, metadata, in_edge_features=(out_channels if self.return_edge_emb else 0), return_edge_emb=False))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            if self.return_edge_emb:
+                x_dict, edge_feature_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            else:
+                x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+                edge_feature_dict = {k: None for k in edge_feature_dict.keys()}
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
 
 
 class ComposerClassificationModel(nn.Module):
@@ -11,36 +99,34 @@ class ComposerClassificationModel(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         self.dropout = dropout
+        self.return_edge_emb = kwargs.get("return_edge_emb", False)
         self.activation = activation
         self.input_features = input_features
         self.hidden_features = hidden_features
         self.output_features = output_features
         pitch_embeddding = kwargs.get("pitch_embedding", 0)
         pitch_embeddding = 0 if pitch_embeddding is None else pitch_embeddding
+        self.in_edge_features = 6 + pitch_embeddding
         block = kwargs.get("conv_block", "SageConv")
         if block == "ResConv":
             conv_block = ResGatedGraphConv
         elif block == "SageConv" or block == "Sage" or block is None:
-            conv_block = SageConvScatter
+            self.encoder = HeteroSageEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation)
         elif block == "GAT" or block == "GATConv":
-            conv_block = GATConvLayer
-        elif block == "RelEdgeConv":
-            conv_block = RelEdgeConv
+            self.encoder = HeteroGATEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation)
+        elif block == "RelEdgeConv" or block == "MusGConv":
+            self.encoder = HeteroMusGConvEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb)
         else:
             raise ValueError("Block type not supported")
-        kwargs["conv_block"] = conv_block
-        self.etypes = {"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}
-        self.encoder = MetricalGNN(input_features, hidden_features, hidden_features, etypes= self.etypes,
-                                   num_layers=num_layers, dropout=dropout, in_edge_features=6+pitch_embeddding,
-                                   metrical=metrical, use_reledge=use_reledge, **kwargs)
+        kwargs["conv_block"] = block
         self.clf = nn.Linear(hidden_features, output_features)
 
     def reset_parameters(self):
         self.encoder.reset_parameters()
         self.clf.reset_parameters()
 
-    def forward(self, **kwargs):
-        h = self.encoder(**kwargs)
+    def forward(self, x_dict, edge_dict, edge_feature_dict, **kwargs):
+        h = self.encoder(x_dict, edge_dict, edge_feature_dict)
         lengths = kwargs["lengths"].tolist() if isinstance(kwargs["lengths"], torch.Tensor) else kwargs["lengths"]
         sg = torch.split(h, lengths)
         sg = [torch.mean(s, dim=0) for s in sg]
@@ -61,6 +147,8 @@ class ComposerClassificationModelLightning(LightningModule):
                                                   activation=activation, dropout=dropout,
                                                   use_reledge=use_reledge, metrical=metrical, **kwargs)
         pitch_embedding = kwargs.get("pitch_embedding", None)
+        self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rests": 3, "consecutive_rev": 4, "during_rev": 5,
+                       "rests_rev": 6}
         self.pitch_embedding = torch.nn.Embedding(12, 16) if pitch_embedding is not None else pitch_embedding
         self.lr = lr
         self.weight_decay = weight_decay
@@ -68,12 +156,12 @@ class ComposerClassificationModelLightning(LightningModule):
         self.reg_loss_type = reg_loss_type
         self.use_signed_features = kwargs.get("use_signed_features", False)
         self.use_reledge = use_reledge
-        self.train_acc = Accuracy()
-        self.val_acc = Accuracy()
-        self.test_acc = Accuracy()
-        self.train_f1 = F1Score(num_classes=output_features, average="macro")
-        self.val_f1 = F1Score(num_classes=output_features, average="macro")
-        self.test_f1 = F1Score(num_classes=output_features, average="macro")
+        self.train_acc = Accuracy(task="multiclass", num_classes=output_features)
+        self.val_acc = Accuracy(task="multiclass", num_classes=output_features)
+        self.test_acc = Accuracy(task="multiclass", num_classes=output_features)
+        self.train_f1 = F1Score(task="multiclass", num_classes=output_features, average="macro")
+        self.val_f1 = F1Score(task="multiclass", num_classes=output_features, average="macro")
+        self.test_f1 = F1Score(task="multiclass", num_classes=output_features, average="macro")
         self.train_loss = torch.nn.CrossEntropyLoss()
         self.save_hyperparameters()
 
@@ -113,12 +201,6 @@ class ComposerClassificationModelLightning(LightningModule):
             optional_repeat = batch["x"].shape[0] // batch["lengths"] + 1 if batch["x"].shape[0] % batch["lengths"] != 0 else batch["x"].shape[0] // batch["lengths"]
             y = batch["y"].repeat(optional_repeat)
         edges, edge_types = add_reverse_edges_from_edge_index(batch["edge_index"], batch["edge_type"])
-        beat_nodes = batch["beat_nodes"] if "beat_nodes" in batch.keys() else None
-        measure_nodes = batch["measure_nodes"] if "measure_nodes" in batch.keys() else None
-        beat_edges = batch["beat_edges"] if "beat_edges" in batch.keys() else None
-        measure_edges = batch["measure_edges"] if "measure_edges" in batch.keys() else None
-        beat_lengths = batch["beat_lengths"] if "beat_lengths" in batch.keys() else None
-        measure_lengths = batch["measure_lengths"] if "measure_lengths" in batch.keys() else None
         na = batch["note_array"]
         if self.use_reledge:
             edge_features = batch["note_array"][edges[1]] - batch["note_array"][edges[0]]
@@ -129,9 +211,10 @@ class ComposerClassificationModelLightning(LightningModule):
         if self.pitch_embedding is not None and edge_features is not None:
             pitch = self.pitch_embedding(torch.remainder(na[:, 0][edges[0]] - na[:, 0][edges[1]], 12).long())
             edge_features = torch.cat([edge_features, pitch], dim=1)
-        y_hat = self.module(x=batch["x"], edge_index=edges, edge_type=edge_types, lengths=batch["lengths"],
-                            beat_nodes=beat_nodes, measure_nodes=measure_nodes, beat_edges=beat_edges, measure_edges=measure_edges,
-                            rel_edge=edge_features, beat_lengths=beat_lengths, measure_lengths=measure_lengths)
+        x_dict = {"note": batch["x"]}
+        edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in METADATA[1]} if edge_features is not None else None
+        y_hat = self.module(x_dict, edge_index_dict, edge_feature_dict, lengths=batch["lengths"])
         return y_hat, y
 
     def configure_optimizers(self):

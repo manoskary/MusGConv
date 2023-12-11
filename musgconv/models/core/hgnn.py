@@ -1,8 +1,9 @@
 import torch.nn as nn
 from torch.nn import functional as F
 import torch
-from .gnn import SageConvScatter as SageConv, ResGatedGraphConv, JumpingKnowledge, RelEdgeConv, MetricalConvLayer
+from .gnn import SageConvScatter as SageConv, ResGatedGraphConv, JumpingKnowledge, RelEdgeConv, MetricalConvLayer, MusGConv
 from torch_scatter import scatter_add
+from torch_geometric.nn import to_hetero
 
 
 class HeteroAttention(nn.Module):
@@ -352,31 +353,15 @@ class MetricalGNN(nn.Module):
                 else:
                     self.convs.append(conv_block(hidden_features, hidden_features, in_edge_features=stack_features,
                                                  bias=True))
-                if self.use_metrical:
-                    self.beat_convs.append(MetricalConvLayer(hidden_features, hidden_features, activation=F.relu, dropout=dropout))
-                    self.measure_convs.append(MetricalConvLayer(hidden_features, hidden_features, activation=F.relu, dropout=dropout))
-                    self.project_metrical.append(nn.Linear(hidden_features*3, hidden_features))
         if self.is_heterogeneous:
-            self.convs.append(HeteroConv(hidden_features, hidden_features, etypes=etypes,
+            self.convs.append(to_hetero(hidden_features, hidden_features, etypes=etypes,
                                          in_edge_features=stack_features, module=conv_block))
         else:
             self.convs.append(conv_block(hidden_features, hidden_features, bias=True, in_edge_features=stack_features))
-        if self.use_metrical:
-            self.beat_convs.append(MetricalConvLayer(hidden_features, output_features, activation=F.relu, dropout=dropout))
-            self.measure_convs.append(MetricalConvLayer(hidden_features, output_features, activation=F.relu, dropout=dropout))
-            self.project_metrical.append(nn.Linear(output_features * 3, output_features))
 
     def reset_parameters(self):
         for conv in self.convs:
             conv.reset_parameters()
-        for conv in self.beat_convs:
-            conv.reset_parameters()
-        for conv in self.measure_convs:
-            conv.reset_parameters()
-        for linear in self.project_metrical:
-            linear.reset_parameters()
-        self.emb_beats.reset_parameters()
-        self.emb_measures.reset_parameters()
 
     def forward(self, x, edge_index, edge_type, beat_nodes, measure_nodes, beat_edges, measure_edges,
                 rel_edge=None, beat_lengths=None, measure_lengths=None, **kwargs):
@@ -496,3 +481,63 @@ class HeteroConv(nn.Module):
             out[idx] = self.conv[ekey](x, edge_index[:, mask], edge_features[mask, :] if edge_features is not None else None)
             out[idx] = self.activation(out[idx])
         return self.reduction(out).to(x.device)
+
+
+
+class HeteroMusGConv(nn.Module):
+    """
+    Convert a Graph Convolutional module to a hetero GraphConv module.
+
+    Parameters
+    ----------
+    module: torch.nn.Module
+        Module to convert
+
+    Returns
+    -------
+    module: torch.nn.Module
+        Converted module
+    """
+
+    def __init__(self, in_features, out_features, metadata, in_edge_features=0, bias=True, reduction='mean', return_edge_emb=False):
+        super(HeteroMusGConv, self).__init__()
+        self.out_features = out_features
+        self.return_edge_emb = return_edge_emb
+        self.etypes = metadata[1]
+        if reduction == 'mean':
+            self.reduction = lambda x: x.mean(dim=0)
+        elif reduction == 'sum':
+            self.reduction = lambda x: x.sum(dim=0)
+        elif reduction == 'max':
+            self.reduction = lambda x: x.max(dim=0)
+        elif reduction == 'min':
+            self.reduction = lambda x: x.min(dim=0)
+        elif reduction == 'concat':
+            self.reduction = lambda x: torch.cat(x, dim=0)
+        else:
+            raise NotImplementedError
+
+        conv_dict = dict()
+        for etype in self.etypes:
+            etype_str = "_".join(etype)
+            conv_dict[etype_str] = MusGConv(in_features, out_features, bias=bias, in_edge_channels=in_edge_features, return_edge_emb=return_edge_emb)
+        self.conv = nn.ModuleDict(conv_dict)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for conv in self.conv.values():
+            conv.reset_parameters()
+
+    def forward(self, x, edge_index_dict, edge_feature_dict=None):
+        x = x["note"] if isinstance(x, dict) else x
+        edge_feature_dict = {key: None for key in self.etypes} if edge_feature_dict is None else edge_feature_dict
+        out = torch.zeros((len(self.conv.keys()), x.shape[0], self.out_features), device=x.device)
+        for idx, ekey in enumerate(self.etypes):
+            etype_str = "_".join(ekey)
+            if self.return_edge_emb:
+                out[idx], edge_feature_dict[ekey] = self.conv[etype_str](x, edge_index_dict[ekey], edge_feature_dict[ekey])
+            else:
+                out[idx] = self.conv[etype_str](x, edge_index_dict[ekey], edge_feature_dict[ekey])
+        if self.return_edge_emb:
+            return {"note": self.reduction(out)}, edge_feature_dict
+        return {"note": self.reduction(out)}

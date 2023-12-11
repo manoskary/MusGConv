@@ -5,8 +5,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning import Trainer
 from musgconv.models.cadence import CadenceClassificationModelLightning
 from musgconv.data.datamodules.cadence_dtm import GraphCadenceDataModule
-from pytorch_lightning.plugins import DDPPlugin
-from pytorch_lightning.utilities.seed import seed_everything
+# from pytorch_lightning.plugins import DDPPlugin
+# from pytorch_lightning.utilities.seed import seed_everything
 import argparse
 
 
@@ -39,7 +39,7 @@ parser.add_argument("--use_signed_features", action="store_true", help="Use sing
 torch.manual_seed(0)
 random.seed(0)
 torch.use_deterministic_algorithms(True)
-seed_everything(seed=0, workers=True)
+# seed_everything(seed=0, workers=True)
 
 
 args = parser.parse_args()
@@ -89,7 +89,7 @@ trainer = Trainer(
     max_epochs=50, accelerator="auto", devices=devices,
     num_sanity_val_steps=1,
     logger=wandb_logger if args.use_wandb else None,
-    plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
+    # plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
     replace_sampler_ddp=False,
     reload_dataloaders_every_n_epochs=5,
     callbacks=[checkpoint_callback],

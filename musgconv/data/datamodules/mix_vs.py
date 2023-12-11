@@ -11,7 +11,6 @@ from musgconv.data.datasets import (
     HaydnStringQuartetGraphVoiceSeparationDataset,
     MozartStringQuartetGraphVoiceSeparationDataset,
     MozartStringQuartetPGGraphVoiceSeparationDataset,
-    CrimGraphPGVoiceSeparationDataset,
     AugmentedNetChordGraphDataset,
     Augmented2022ChordGraphDataset,
 )
@@ -21,7 +20,6 @@ from sklearn.model_selection import train_test_split
 from musgconv.utils import add_reverse_edges_from_edge_index
 from musgconv.data.samplers import BySequenceLengthSampler
 import numpy as np
-from tensordict import TensorDict
 
 
 class GraphPGMixVSDataModule(LightningDataModule):

@@ -7,8 +7,8 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.tuner.tuning import Tuner
 from musgconv.models.composer_clf import ComposerClassificationModelLightning
 from musgconv.data.datamodules.graph_classification import ComposerClassificationGraphDataModule
-from pytorch_lightning.plugins import DDPPlugin
-from pytorch_lightning.utilities.seed import seed_everything
+# from pytorch_lightning.plugins import DDPPlugin
+# from pytorch_lightning.utilities.seed import seed_everything
 import argparse
 
 
@@ -39,11 +39,11 @@ parser.add_argument("--use_signed_features", action="store_true", help="Use sing
 torch.manual_seed(0)
 random.seed(0)
 torch.use_deterministic_algorithms(True)
-seed_everything(seed=0, workers=True)
+# seed_everything(seed=0, workers=True)
 
 args = parser.parse_args()
 if args.gpus == "-1":
-    devices = None
+    devices = 1
     use_ddp = False
 else:
     devices = [eval(gpu) for gpu in args.gpus.split(",")]
@@ -93,16 +93,16 @@ trainer = Trainer(
     max_epochs=100, accelerator="auto", devices=devices,
     num_sanity_val_steps=1,
     logger=wandb_logger if args.use_wandb else None,
-    plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
-    replace_sampler_ddp=False,
+    # plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
+    # replace_sampler_ddp=False,
     gradient_clip_val=0.5,
     reload_dataloaders_every_n_epochs=5,
     callbacks=[checkpoint_callback],
     )
 
 # Find Batch Size
-tuner = Tuner(trainer)
-tuner.scale_batch_size(model, datamodule, mode="power")
+# tuner = Tuner(trainer)
+# tuner.scale_batch_size(model, datamodule, mode="power")
 
 # Training
 trainer.fit(model, datamodule)

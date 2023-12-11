@@ -7,7 +7,6 @@ from musgconv.data.datasets import (
 )
 from torch.nn import functional as F
 from sklearn.model_selection import train_test_split
-from musgconv.utils import add_reverse_edges_from_edge_index, node_subgraph
 from musgconv.data.samplers import SubgraphCreationSampler
 import numpy as np
 from .mix_vs import idx_tuple_to_dict

@@ -1,9 +1,96 @@
 from musgconv.models.core import *
 from pytorch_lightning import LightningModule
-from musgconv.models.core.hgnn import MetricalGNN
-from musgconv.utils import add_reverse_edges_from_edge_index
+from musgconv.models.core.hgnn import MetricalGNN, HeteroMusGConv
+from musgconv.utils import add_reverse_edges_from_edge_index, METADATA
 from torchmetrics import Accuracy, F1Score
 from torch_geometric.utils import to_dense_adj
+from torch_geometric.nn import to_hetero, SAGEConv, GATConv
+
+
+class HeteroSageEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata=METADATA, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(to_hetero(SAGEConv(in_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        if n_layers > 1:
+            for i in range(n_layers-1):
+                self.layers.append(to_hetero(SAGEConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
+
+
+class HeteroGATEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(to_hetero(GATConv(in_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        if n_layers > 1:
+            for i in range(n_layers - 1):
+                self.layers.append(to_hetero(GATConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
+
+
+
+class HeteroMusGConvEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.in_edge_features = kwargs.get("in_edge_features", 0)
+        self.return_edge_emb = kwargs.get("return_edge_emb", False)
+        self.layers = nn.ModuleList()
+        self.layers.append(HeteroMusGConv(in_channels, out_channels, metadata, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb))
+        if n_layers > 2:
+            for i in range(n_layers - 2):
+                self.layers.append(HeteroMusGConv(
+                    out_channels, out_channels, metadata,
+                    in_edge_features=(out_channels if self.return_edge_emb else 0),
+                    return_edge_emb=self.return_edge_emb))
+        self.layers.append(HeteroMusGConv(out_channels, out_channels, metadata, in_edge_features=(out_channels if self.return_edge_emb else 0), return_edge_emb=False))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            if self.return_edge_emb:
+                x_dict, edge_feature_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            else:
+                x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+                edge_feature_dict = {k: None for k in edge_feature_dict.keys()}
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
 
 
 class CadenceClassificationModel(nn.Module):
@@ -25,18 +112,16 @@ class CadenceClassificationModel(nn.Module):
         if block == "ResConv":
             conv_block = ResGatedGraphConv
         elif block == "SageConv" or block == "Sage" or block is None:
-            conv_block = SageConvScatter
+            self.encoder = HeteroSageEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation, **kwargs)
         elif block == "GAT" or block == "GATConv":
-            conv_block = GATConvLayer
-        elif block == "RelEdgeConv":
-            conv_block = RelEdgeConv
+            self.encoder = HeteroGATEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation, **kwargs)
+        elif block == "RelEdgeConv" or block == "MusGConv":
+            self.encoder = HeteroMusGConvEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation, **kwargs)
         else:
             raise ValueError("Block type not supported")
         kwargs["conv_block"] = conv_block
         self.etypes = {"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}
-        self.encoder = MetricalGNN(64, hidden_features, hidden_features, etypes= self.etypes,
-                                   num_layers=num_layers, dropout=dropout, in_edge_features=6+pitch_embeddding,
-                                   metrical=metrical, use_reledge=use_reledge, **kwargs)
+
         self.decoder_left = nn.Linear(hidden_features, hidden_features)
         self.decoder_right = nn.Linear(hidden_features, hidden_features)
         self.clf = SageConvLayer(hidden_features, output_features)
@@ -56,25 +141,25 @@ class CadenceClassificationModel(nn.Module):
         new_adj = torch.sigmoid(new_adj)
         return new_adj
 
-    def forward(self, **kwargs):
-        h = self.encode(**kwargs)
+    def forward(self, x_dict, edge_dict, edge_feature_dict, **kwargs):
+        h = self.encode(x_dict, edge_dict, edge_feature_dict)
         h_new, y_new = self.smote_layer.fit_generate(h, kwargs["y"])
         new_adj = self.decoder_forward(h_new)
         out = self.clf(h_new, F.hardshrink(new_adj, lambd=0.5))
         return out, y_new, new_adj[:h.shape[0], :h.shape[0]], h
 
-    def encode(self, **kwargs):
-        x = kwargs["x"]
+    def encode(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        x = x_dict["note"]
         h_pitch = self.pitch_embedding(x[:, 0].long())
         h_spelling = self.spelling_embedding(x[:, 1].long())
         h = self.embedding(x[:, 2:-1])
         h = torch.cat([h, h_pitch, h_spelling], dim=-1)
-        kwargs["x"] = h
-        h = self.encoder(**kwargs)
+        x_dict = {"note": h}
+        h = self.encoder(x_dict, edge_index_dict, edge_feature_dict)
         return h
 
-    def predict(self, **kwargs):
-        h = self.encode(**kwargs)
+    def predict(self, x_dict, edge_index_dict, edge_feature_dict):
+        h = self.encode(x_dict, edge_index_dict, edge_feature_dict)
         new_adj = self.decoder_forward(h)
         out = self.clf(h, new_adj)
         return out
@@ -111,10 +196,8 @@ class CadenceClassificationModelLightning(LightningModule):
         self.save_hyperparameters()
 
     def training_step(self, batch, batch_idx, **kwargs):
-        edges, edge_types, edge_features, beat_nodes, measure_nodes, beat_edges, measure_edges, beat_lengths, measure_lengths, edge_features = self.common_step(batch, batch_idx)
-        y_hat, y, new_adj, features = self.module(x=batch["x"], edge_index=edges, edge_type=edge_types, lengths=None,
-                            beat_nodes=beat_nodes, measure_nodes=measure_nodes, beat_edges=beat_edges, measure_edges=measure_edges,
-                            rel_edge=edge_features, beat_lengths=beat_lengths, measure_lengths=measure_lengths, y=batch["y"])
+        x_dict, edge_index_dict, edge_feature_dict = self.common_step(batch, batch_idx)
+        y_hat, y, new_adj, features = self.module(x_dict=x_dict, edge_index=edge_index_dict, edge_type=edge_feature_dict, y=batch["y"])
         old_adj = to_dense_adj(batch["edge_index"], max_num_nodes=batch["x"].shape[0])
         reg_loss = self.train_regloss(new_adj, old_adj.squeeze(0))
         clf_loss = self.train_loss(y_hat, y)
@@ -131,14 +214,10 @@ class CadenceClassificationModelLightning(LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx, **kwargs):
-        edges, edge_types, edge_features, beat_nodes, measure_nodes, beat_edges, measure_edges, beat_lengths, measure_lengths, edge_features = self.common_step(
+        x_dict, edge_index_dict, edge_feature_dict = self.common_step(
             batch, batch_idx)
         y = batch["y"]
-        y_hat = self.module.predict(x=batch["x"], edge_index=edges, edge_type=edge_types, lengths=None,
-                                        beat_nodes=beat_nodes, measure_nodes=measure_nodes, beat_edges=beat_edges,
-                                        measure_edges=measure_edges,
-                                        rel_edge=edge_features, beat_lengths=beat_lengths,
-                                        measure_lengths=measure_lengths, y=batch["y"])
+        y_hat = self.module.predict(x_dict=x_dict, edge_index=edge_index_dict, edge_type=edge_feature_dict)
 
         loss = F.cross_entropy(y_hat, y)
         acc = self.val_acc(y_hat, y)
@@ -148,14 +227,10 @@ class CadenceClassificationModelLightning(LightningModule):
         self.log("val_f1", fscore.item(), prog_bar=True, on_epoch=True, batch_size=batch["x"].shape[0])
 
     def test_step(self, batch, batch_idx):
-        edges, edge_types, edge_features, beat_nodes, measure_nodes, beat_edges, measure_edges, beat_lengths, measure_lengths, edge_features = self.common_step(
+        x_dict, edge_index_dict, edge_feature_dict = self.common_step(
             batch, batch_idx)
         y = batch["y"]
-        y_hat = self.module.predict(x=batch["x"], edge_index=edges, edge_type=edge_types, lengths=None,
-                                    beat_nodes=beat_nodes, measure_nodes=measure_nodes, beat_edges=beat_edges,
-                                    measure_edges=measure_edges,
-                                    rel_edge=edge_features, beat_lengths=beat_lengths,
-                                    measure_lengths=measure_lengths, y=batch["y"])
+        y_hat = self.module.predict(x_dict=x_dict, edge_index=edge_index_dict, edge_type=edge_feature_dict)
         loss = F.cross_entropy(y_hat, y)
         acc = self.test_acc(y_hat, y)
         fscore = self.test_f1(y_hat, y)
@@ -166,12 +241,7 @@ class CadenceClassificationModelLightning(LightningModule):
     def common_step(self, batch, batch_idx):
         """ batch is dict with keys the variable names"""
         edges, edge_types = add_reverse_edges_from_edge_index(batch["edge_index"], batch["edge_type"])
-        beat_nodes = batch["beat_nodes"] if "beat_nodes" in batch.keys() else None
-        measure_nodes = batch["measure_nodes"] if "measure_nodes" in batch.keys() else None
-        beat_edges = batch["beat_edges"] if "beat_edges" in batch.keys() else None
-        measure_edges = batch["measure_edges"] if "measure_edges" in batch.keys() else None
-        beat_lengths = batch["beat_lengths"] if "beat_lengths" in batch.keys() else None
-        measure_lengths = batch["measure_lengths"] if "measure_lengths" in batch.keys() else None
+
         na = batch["note_array"]
         if self.use_reledge:
             edge_features = batch["note_array"][edges[1]] - batch["note_array"][edges[0]]
@@ -182,8 +252,10 @@ class CadenceClassificationModelLightning(LightningModule):
         if self.pitch_embedding is not None and edge_features is not None:
             pitch = self.pitch_embedding(torch.remainder(na[:, 0][edges[0]] - na[:, 0][edges[1]], 12).long())
             edge_features = torch.cat([edge_features, pitch], dim=1)
-        out = edges, edge_types, edge_features, beat_nodes, measure_nodes, beat_edges, measure_edges, beat_lengths, measure_lengths, edge_features
-        return out
+        x_dict = {"note": batch["x"]}
+        edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in METADATA[1]}
+        return x_dict, edge_index_dict, edge_feature_dict
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)

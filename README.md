@@ -9,7 +9,7 @@ Please install the version of torch that is compatible with your machine prefera
 
 Use the following command to install torch with conda:
 ```shell
-conda create -n musgconv python=3.8
+conda create -n musgconv python=3.9
 conda activate musgconv
 conda install pytorch cudatoolkit=<your version of cuda> -c pytorch
 ```

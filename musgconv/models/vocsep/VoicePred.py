@@ -12,7 +12,7 @@ from torch import nn
 from torch.nn import functional as F
 from musgconv.utils import METADATA
 from musgconv.models.core.hgnn import HeteroMusGConv
-from torch_geometric.nn import to_hetero, SAGEConv, GATConv
+from torch_geometric.nn import to_hetero, SAGEConv, GATConv, ResGatedGraphConv
 
 
 class HeteroSageEncoder(nn.Module):
@@ -23,6 +23,32 @@ class HeteroSageEncoder(nn.Module):
         if n_layers > 1:
             for i in range(n_layers-1):
                 self.layers.append(to_hetero(SAGEConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
+        self.dropout = dropout
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
+        for conv in self.layers[:-1]:
+            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
+            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
+        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
+        return x_dict["note"]
+
+
+
+class HeteroResGatedConvEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, metadata=METADATA, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(to_hetero(ResGatedGraphConv(in_channels, out_channels), metadata, aggr="mean"))
+        if n_layers > 1:
+            for i in range(n_layers-1):
+                self.layers.append(to_hetero(ResGatedGraphConv(out_channels, out_channels), metadata, aggr="mean"))
         self.dropout = dropout
         self.activation = activation
 
@@ -365,13 +391,13 @@ class MetricalLinkPredictionModel(nn.Module):
         self.in_edge_features = 5+self.pitch_embedding if use_reledge else 0
         self.return_edge_emb = kwargs.get("return_edge_emb", False)
         if block == "ResConv":
-            self.encoder = ResGatedGraphConv
+            self.encoder = HeteroResGatedConvEncoder(in_feats, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation)
         elif block == "SageConv" or block == "Sage" or block is None:
             self.encoder = HeteroSageEncoder(in_feats, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation)
         elif block == "GAT" or block == "GATConv":
             self.encoder = HeteroGATEncoder(in_feats, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation)
         elif block == "RelEdgeConv" or block == "MusGConv":
-            self.block = HeteroMusGConvEncoder(in_feats, n_hidden, metadata=METADATA, n_layers=n_layers,
+            self.encoder = HeteroMusGConvEncoder(in_feats, n_hidden, metadata=METADATA, n_layers=n_layers,
                                                dropout=dropout, activation=activation,
                                                in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb)
         else:
@@ -381,8 +407,8 @@ class MetricalLinkPredictionModel(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.use_metrical = use_metrical
         self.use_reledge = use_reledge
-        self.embed = MetricalGNN(in_feats, n_hidden, n_hidden, etypes, n_layers, dropout, use_reledge=use_reledge,
-                                 in_edge_features=5+self.pitch_embedding, metrical=use_metrical, **kwargs)
+        # self.embed = MetricalGNN(in_feats, n_hidden, n_hidden, etypes, n_layers, dropout, use_reledge=use_reledge,
+        #                          in_edge_features=5+self.pitch_embedding, metrical=use_metrical, **kwargs)
         self.predictor = nn.Sequential(
             nn.Linear(n_hidden*2+3, int(n_hidden)),
             nn.ReLU(),

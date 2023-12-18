@@ -118,7 +118,7 @@ class HeteroMusGConvEncoder(nn.Module):
                 x_dict, edge_feature_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
             else:
                 x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
-                edge_feature_dict = {k: None for k in edge_feature_dict.keys()}
+                edge_feature_dict = {k: None for k in edge_index_dict.keys()}
             x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
             x_dict = {k: self.activation(v) for k, v in x_dict.items()}
             x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}

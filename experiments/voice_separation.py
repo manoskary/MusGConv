@@ -7,9 +7,9 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.tuner.tuning import Tuner
 from musgconv.models.vocsep import MetricalVoiceLinkPredictionModel
 from musgconv.data.datamodules.mix_vs import GraphMixVSDataModule
-from pytorch_lightning.plugins import DDPPlugin
+# from pytorch_lightning.plugins import DDPPlugin
 from musgconv.utils.visualization import show_voice_pr
-from pytorch_lightning.utilities.seed import seed_everything
+# from pytorch_lightning.utilities.seed import seed_everything
 import argparse
 
 
@@ -39,14 +39,15 @@ parser.add_argument("--pitch_embedding", type=int, default=None, help="Pitch emb
 parser.add_argument("--use_wandb", action="store_true", help="Use wandb for logging")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions")
+parser.add_argument("--return_edge_emb", action="store_true", help="Input edge embeddings from the previous Encoder layer to the next.")
 parser.add_argument("--use_signed_features", action="store_true", help="Use singed instead of absolute edge features in the reledge model. It applies only when use_reledge is True")
 
 
 # for reproducibility
 torch.manual_seed(0)
 random.seed(0)
-torch.use_deterministic_algorithms(True)
-seed_everything(seed=0, workers=True)
+# torch.use_deterministic_algorithms(True)
+# seed_everything(seed=0, workers=True)
 
 args = parser.parse_args()
 if args.gpus == "-1":
@@ -74,7 +75,7 @@ if args.use_wandb:
     wandb_logger = WandbLogger(
         log_model=True,
         entity=args.wandb_entity,
-        project="Relational Edge Convolution",
+        project="MusGConv",
         group=f"Voice Separation - {collections if isinstance(collections, str) else collections[0]}",
         job_type=f"Relative - {'wPE' if args.pitch_embedding is not None else ''}" if args.use_reledge else "Absolute",
         # tags=tags,
@@ -95,7 +96,8 @@ else:
         weight_decay=args.weight_decay, linear_assignment=linear_assignment,
         block=args.model, jk=args.use_jk, reg_loss_weight=args.reg_loss_weight,
         reg_loss_type=args.reg_loss_type, use_reledge=args.use_reledge, use_metrical=args.use_metrical,
-        pitch_embedding=args.pitch_embedding, stack_convs=args.stack_convs, use_signed_features=args.use_signed_features)
+        pitch_embedding=args.pitch_embedding, stack_convs=args.stack_convs, use_signed_features=args.use_signed_features,
+        return_edge_emb=args.return_edge_emb)
 
 print("Only monophonic:", model.linear_assignment)
 checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="val_fscore", mode="max")
@@ -104,8 +106,8 @@ trainer = Trainer(
     max_epochs=50, accelerator="auto", devices=devices,
     num_sanity_val_steps=1,
     logger=wandb_logger if args.use_wandb else None,
-    plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
-    replace_sampler_ddp=False,
+    # plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
+    # replace_sampler_ddp=False,
     gradient_clip_val=0.5,
     reload_dataloaders_every_n_epochs=5,
     callbacks=[checkpoint_callback],

@@ -37,8 +37,8 @@ class VocSepLightningModule(LightningModule):
         else:
             self.reg_loss_weight = kwargs["reg_loss_weight"] if "reg_loss_weight" in kwargs.keys() else 1.0
         # metrics
-        self.train_acc_score = Accuracy()
-        self.val_acc_score = Accuracy()
+        self.train_acc_score = Accuracy(task="multiclass", num_classes=2)
+        self.val_acc_score = Accuracy(task="multiclass", num_classes=2)
         self.train_loss = LinkPredictionLoss()
         if self.reg_loss_type == "ca":
             self.reg_loss = LinearAssignmentLossCE()
@@ -46,17 +46,17 @@ class VocSepLightningModule(LightningModule):
             self.reg_loss = LinearAssignmentLoss()
         self.val_loss = LinkPredictionLoss()
         self.linear_assignment = kwargs["linear_assignment"] if "linear_assignment" in kwargs.keys() else False
-        self.val_f1_score = F1Score(average="macro", num_classes=1).cpu()
-        self.val_precision = Precision(average="macro", num_classes=1).cpu()
-        self.val_recall = Recall(average="macro", num_classes=1).cpu()
-        self.val_monvoicef1 = MonophonicVoiceF1(average="macro", num_classes=2)
-        self.test_f1_score = F1Score(average="macro", num_classes=1)
-        self.test_precision = Precision(average="macro", num_classes=1)
-        self.test_recall = Recall(average="macro", num_classes=1)
-        self.test_f1_allignment = F1Score(average="macro", num_classes=1)
-        self.test_precision_allignment = Precision(average="macro", num_classes=1)
-        self.test_recall_allignment = Recall(average="macro", num_classes=1)
-        self.test_monvoicef1 = MonophonicVoiceF1(average="macro", num_classes=2)
+        self.val_f1_score = F1Score(task="binary", average="macro", num_classes=1).cpu()
+        self.val_precision = Precision(task="binary", average="macro", num_classes=1).cpu()
+        self.val_recall = Recall(task="binary", average="macro", num_classes=1).cpu()
+        self.val_monvoicef1 = MonophonicVoiceF1(average="macro", num_classes=2, task="binary")
+        self.test_f1_score = F1Score(task="binary", average="macro", num_classes=1).cpu()
+        self.test_precision = Precision(task="binary", average="macro", num_classes=1).cpu()
+        self.test_recall = Recall(task="binary", average="macro", num_classes=1).cpu()
+        self.test_f1_allignment = F1Score(task="binary", average="macro", num_classes=1).cpu()
+        self.test_precision_allignment = Precision(task="binary", average="macro", num_classes=1).cpu()
+        self.test_recall_allignment = Recall(task="binary", average="macro", num_classes=1).cpu()
+        self.test_monvoicef1 = MonophonicVoiceF1(average="macro", num_classes=2, task="binary")
         self.test_linear_assignment = LinearAssignmentScore()
         self.val_linear_assignment = LinearAssignmentScore()
         # Alpha and beta are hyperparams from reference for pitch and onset score.
@@ -67,7 +67,7 @@ class VocSepLightningModule(LightningModule):
         """To be re-written by child"""
         pass
 
-    def training_epoch_end(self, *args, **kwargs):
+    def on_train_epoch_end(self, *args, **kwargs):
         if self.reg_loss_type == "auto":
             self.reg_loss_weight += 0.002
 

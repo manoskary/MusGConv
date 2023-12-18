@@ -3,7 +3,8 @@ from pytorch_lightning import LightningDataModule
 import torch
 from torch.utils.data import ConcatDataset
 from musgconv.data.datasets import (
-    ASAPGraphDataset
+    ASAPGraphDataset,
+    DCMLGraphDataset
 )
 from torch.nn import functional as F
 from sklearn.model_selection import train_test_split
@@ -24,7 +25,8 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
         self.include_measures = include_measures
         self.normalize_features = True
         self.datasets = [
-            ASAPGraphDataset(force_reload=self.force_reload, n_jobs=self.num_workers, include_measures=self.include_measures, max_size=max_size),
+            # ASAPGraphDataset(force_reload=self.force_reload, n_jobs=self.num_workers, include_measures=self.include_measures, max_size=max_size),
+            DCMLGraphDataset(force_reload=self.force_reload, n_jobs=self.num_workers, include_measures=self.include_measures, max_size=max_size)
         ]
         if not (all([d.features == self.datasets[0].features for d in self.datasets])):
             raise Exception("Input dataset has different features, Datasets {} with sizes: {}".format(

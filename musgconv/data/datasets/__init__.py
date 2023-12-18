@@ -6,3 +6,4 @@ from .mcma import *
 from .chord import *
 from .haydn_string_quartets import *
 from .mozart_string_quartets import *
+from .dcml_corpora import *

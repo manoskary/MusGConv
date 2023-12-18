@@ -291,7 +291,7 @@ class MetricalVoiceLinkPredictionModel(VocSepLightningModule):
         edge_index_dict = {et: edges[:, edge_types == self.etypes[et[1]]] for et in METADATA[1]}
         edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
                              METADATA[1]} if edge_features is not None else None
-        h = self.module.encoder(x_dict, edge_index_dict, edge_feature_dict)
+        h = self.module.encoder(x_dict, edge_index_dict, edge_feature_dict)["note"]
         pos_pitch_score = self.pitch_score(pos_edges, na[:, 0])
         pos_onset_score = self.onset_score(pos_edges, na[:, 1], na[:, 2], na[:, 3], na[:, 4], na[:, 5])
         neg_pitch_score = self.pitch_score(neg_edges, na[:, 0])

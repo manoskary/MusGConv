@@ -51,7 +51,7 @@ random.seed(0)
 
 args = parser.parse_args()
 if args.gpus == "-1":
-    devices = None
+    devices = 1
     use_ddp = False
 else:
     devices = [eval(gpu) for gpu in args.gpus.split(",")]

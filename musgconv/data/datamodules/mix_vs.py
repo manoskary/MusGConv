@@ -228,11 +228,6 @@ class GraphMixVSDataModule(LightningDataModule):
     def collate_fn(self, batch):
         out = {}
         e = batch[0]
-        if self.include_measures:
-            out["beat_nodes"] = e["beat_nodes"].long().squeeze()
-            out["beat_edges"] = e["beat_edges"].long().squeeze()
-            out["measure_nodes"] = e["measure_nodes"].long().squeeze()
-            out["measure_edges"] = e["measure_edges"].long().squeeze()
         out["x"] = F.normalize(e["x"].squeeze(0).float()) if self.normalize_features else e["x"].squeeze(0).float()
         out["y"] = e["y"].squeeze(0)
         out["edge_index"] = e["edge_index"].squeeze(0)
@@ -253,16 +248,7 @@ class GraphMixVSDataModule(LightningDataModule):
         potential_edges = list()
         true_edges = list()
         max_idx = []
-        beats = []
-        beat_eindex = []
-        measures = []
-        measure_eindex = []
         for e in examples:
-            if self.include_measures:
-                beats.append(e["beat_nodes"].long())
-                beat_eindex.append(e["beat_edges"].long())
-                measures.append(e["measure_nodes"].long())
-                measure_eindex.append(e["measure_edges"].long())
             x.append(e["x"])
             lengths.append(e["x"].shape[0])
             edge_index.append(e["edge_index"])
@@ -283,15 +269,6 @@ class GraphMixVSDataModule(LightningDataModule):
         out["edge_type"] = torch.cat([edge_types[i] for i in perm_idx], dim=0).long()
         out["y"] = torch.cat([y[i] for i in perm_idx], dim=0).long()
         out["note_array"] = torch.cat([note_array[i] for i in perm_idx], dim=0).float()
-        if self.include_measures:
-            max_beat_idx = np.cumsum(np.array([0] + [beats[i].shape[0] for i in perm_idx]))
-            out["beat_nodes"] = torch.cat([beats[pi] + max_beat_idx[i] for i, pi in enumerate(perm_idx)], dim=0).long()
-            out["beat_lengths"] = torch.tensor(max_beat_idx).long()
-            out["beat_edges"] = torch.cat([torch.vstack((beat_eindex[pi][0] + max_idx[i], beat_eindex[pi][1] + max_beat_idx[i])) for i, pi in enumerate(perm_idx)], dim=1).long()
-            max_measure_idx = np.cumsum(np.array([0] + [measures[i].shape[0] for i in perm_idx]))
-            out["measure_nodes"] = torch.cat([measures[pi] + max_measure_idx[i] for i, pi in enumerate(perm_idx)], dim=0).long()
-            out["measure_edges"] = torch.cat([torch.vstack((measure_eindex[pi][0] + max_idx[i], measure_eindex[pi][1] + max_measure_idx[i])) for i, pi in enumerate(perm_idx)], dim=1).long()
-            out["measure_lengths"] = torch.tensor(max_measure_idx).long()
         return out
 
     def train_dataloader(self):

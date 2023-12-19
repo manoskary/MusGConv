@@ -428,7 +428,7 @@ def node_subgraph(graph, nodes, include_measures=False):
     out["note_array"] = structured_to_unstructured(
         graph.note_array[
             ["pitch", "onset_div", "duration_div", "onset_beat", "duration_beat", "ts_beats"]]
-    )[indices] if isinstance(graph, HeteroScoreGraph) else graph.note_array[nodes]
+    )[nodes] if isinstance(graph, HeteroScoreGraph) else graph.note_array[nodes]
     out["name"] = graph.name
     if include_measures:
         measure_edges = torch.tensor(graph.measure_edges)

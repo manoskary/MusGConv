@@ -4,93 +4,8 @@ from musgconv.models.core.hgnn import MetricalGNN
 from musgconv.utils import add_reverse_edges_from_edge_index
 from torchmetrics import Accuracy, F1Score
 from musgconv.utils import METADATA
-from musgconv.models.core.hgnn import HeteroMusGConv
-from torch_geometric.nn import to_hetero, SAGEConv, GATConv
-
-
-class HeteroSageEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels, metadata=METADATA, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
-        super().__init__()
-        self.layers = nn.ModuleList()
-        self.layers.append(to_hetero(SAGEConv(in_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
-        if n_layers > 1:
-            for i in range(n_layers-1):
-                self.layers.append(to_hetero(SAGEConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
-        self.dropout = dropout
-        self.activation = activation
-
-    def reset_parameters(self):
-        for conv in self.layers:
-            conv.reset_parameters()
-
-    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
-        for conv in self.layers[:-1]:
-            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
-            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
-            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
-            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
-        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
-        return x_dict["note"]
-
-
-class HeteroGATEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels, metadata, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
-        super().__init__()
-        self.layers = nn.ModuleList()
-        self.layers.append(to_hetero(GATConv(in_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
-        if n_layers > 1:
-            for i in range(n_layers - 1):
-                self.layers.append(to_hetero(GATConv(out_channels, out_channels, aggr="sum"), metadata, aggr="mean"))
-        self.dropout = dropout
-        self.activation = activation
-
-    def reset_parameters(self):
-        for conv in self.layers:
-            conv.reset_parameters()
-
-    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
-        for conv in self.layers[:-1]:
-            x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
-            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
-            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
-            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
-        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
-        return x_dict["note"]
-
-
-class HeteroMusGConvEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels, metadata, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
-        super().__init__()
-        self.in_edge_features = kwargs.get("in_edge_features", 0)
-        self.return_edge_emb = kwargs.get("return_edge_emb", False)
-        self.layers = nn.ModuleList()
-        self.layers.append(HeteroMusGConv(in_channels, out_channels, metadata, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb))
-        if n_layers > 2:
-            for i in range(n_layers - 2):
-                self.layers.append(HeteroMusGConv(
-                    out_channels, out_channels, metadata,
-                    in_edge_features=(out_channels if self.return_edge_emb else 0),
-                    return_edge_emb=self.return_edge_emb))
-        self.layers.append(HeteroMusGConv(out_channels, out_channels, metadata, in_edge_features=(out_channels if self.return_edge_emb else 0), return_edge_emb=False))
-        self.dropout = dropout
-        self.activation = activation
-
-    def reset_parameters(self):
-        for conv in self.layers:
-            conv.reset_parameters()
-
-    def forward(self, x_dict, edge_index_dict, edge_feature_dict, **kwargs):
-        for conv in self.layers[:-1]:
-            if self.return_edge_emb:
-                x_dict, edge_feature_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
-            else:
-                x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
-                edge_feature_dict = {k: None for k in edge_feature_dict.keys()}
-            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
-            x_dict = {k: self.activation(v) for k, v in x_dict.items()}
-            x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
-        x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
-        return x_dict["note"]
+from torch_geometric.nn import to_hetero
+from musgconv.models.core.utils import HeteroMusGConvEncoder, SageEncoder, GATEncoder, ResGatedConvEncoder
 
 
 class ComposerClassificationModel(nn.Module):
@@ -109,12 +24,19 @@ class ComposerClassificationModel(nn.Module):
         self.in_edge_features = 6 + pitch_embeddding
         block = kwargs.get("conv_block", "SageConv")
         if block == "ResConv":
-            conv_block = ResGatedGraphConv
+            print("Using ResGatedGraphConv")
+            enc = ResGatedConvEncoder(input_features, hidden_features, n_layers=num_layers, dropout=dropout, activation=activation)
+            self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
         elif block == "SageConv" or block == "Sage" or block is None:
-            self.encoder = HeteroSageEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation)
+            print("Using SageConv")
+            enc = SageEncoder(input_features, hidden_features, n_layers=num_layers, dropout=dropout, activation=activation)
+            self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
         elif block == "GAT" or block == "GATConv":
-            self.encoder = HeteroGATEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation)
+            print("Using GATConv")
+            enc = GATEncoder(input_features, hidden_features, n_layers=num_layers, dropout=dropout, activation=activation)
+            self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
         elif block == "RelEdgeConv" or block == "MusGConv":
+            print("Using MusGConv")
             self.encoder = HeteroMusGConvEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb)
         else:
             raise ValueError("Block type not supported")
@@ -126,7 +48,7 @@ class ComposerClassificationModel(nn.Module):
         self.clf.reset_parameters()
 
     def forward(self, x_dict, edge_dict, edge_feature_dict, **kwargs):
-        h = self.encoder(x_dict, edge_dict, edge_feature_dict)
+        h = self.encoder(x_dict, edge_dict, edge_feature_dict)["note"]
         lengths = kwargs["lengths"].tolist() if isinstance(kwargs["lengths"], torch.Tensor) else kwargs["lengths"]
         sg = torch.split(h, lengths)
         sg = [torch.mean(s, dim=0) for s in sg]

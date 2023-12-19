@@ -4,10 +4,10 @@ import random
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning import Trainer
-from pytorch_lightning.plugins import DDPPlugin
+# from pytorch_lightning.plugins import DDPPlugin
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import StochasticWeightAveraging
-from pytorch_lightning.utilities.seed import seed_everything
+# from pytorch_lightning.utilities.seed import seed_everything
 import argparse
 
 
@@ -39,13 +39,14 @@ parser.add_argument("--model", type=str, default="RelEdgeConv", help="Block Conv
 parser.add_argument("--use_wandb", action="store_true", help="Use wandb for logging.")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions in the model.")
+parser.add_argument("--return_edge_emb", action="store_true", help="Input edge embeddings from the previous Encoder layer to the next.")
 parser.add_argument("--use_signed_features", action="store_true", help="Use singed instead of absolute edge features in the reledge model. It applies only when use_reledge is True")
 
 # for reproducibility
 torch.manual_seed(0)
 random.seed(0)
 torch.use_deterministic_algorithms(True)
-seed_everything(seed=0, workers=True)
+# seed_everything(seed=0, workers=True)
 
 
 args = parser.parse_args()
@@ -90,7 +91,9 @@ model = st.models.chord.MetricalChordPrediction(
     datamodule.features, args.n_hidden, datamodule.tasks, args.n_layers, lr=args.lr, dropout=args.dropout,
     weight_decay=args.weight_decay, use_nade=use_nade, use_jk=args.use_jk, weight_loss=weight_loss,
     use_reledge=args.use_reledge, use_metrical=args.use_metrical, pitch_embedding=args.pitch_embedding,
-    conv_block=args.model, stack_convs=args.stack_convs, use_signed_features=args.use_signed_features)
+    conv_block=args.model, stack_convs=args.stack_convs, use_signed_features=args.use_signed_features,
+    return_edge_emb=args.return_edge_emb
+    )
 checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="global_step", mode="max")
 early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=0.02, patience=5, verbose=False, mode="min")
 # swa_callback = StochasticWeightAveraging(swa_lrs=1e-2)
@@ -100,7 +103,7 @@ trainer = Trainer(
     accelerator="auto", devices=devices,
     num_sanity_val_steps=1,
     logger=wandb_logger if args.use_wandb else None,
-    plugins=DDPPlugin(find_unused_parameters=False) if use_ddp else None,
+    # plugins=DDPPlugin(find_unused_parameters=False) if use_ddp else None,
     callbacks=[checkpoint_callback],
     reload_dataloaders_every_n_epochs=5,
     )

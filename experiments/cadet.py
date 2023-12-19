@@ -32,6 +32,7 @@ parser.add_argument("--use_wandb", action="store_true", help="Use wandb")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions of the same type")
 parser.add_argument("--heterogeneous", action="store_true", help="Use heterogeneous graphs")
+parser.add_argument("--return_edge_emb", action="store_true", help="Input edge embeddings from the previous Encoder layer to the next.")
 parser.add_argument("--use_signed_features", action="store_true", help="Use singed instead of absolute edge features in the reledge model. It applies only when use_reledge is True")
 
 
@@ -71,7 +72,9 @@ model = CadenceClassificationModelLightning(
     n_layers=n_layers, n_hidden=n_hidden, dropout=args.dropout,
     lr=args.lr, weight_decay=args.weight_decay, metrical=args.use_metrical, use_jk=args.use_jk,
     stack_convs=args.stack_convs, pitch_embedding=args.pitch_embedding, reg_loss_weight=args.reg_loss_weight,
-    hetero=args.heterogeneous, conv_block=args.model, use_signed_features=args.use_signed_features,)
+    hetero=args.heterogeneous, conv_block=args.model, use_signed_features=args.use_signed_features,
+    return_edge_emb=args.return_edge_emb,
+)
 
 if args.use_wandb:
     wandb_logger = WandbLogger(

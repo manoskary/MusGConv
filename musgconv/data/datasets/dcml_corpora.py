@@ -58,7 +58,7 @@ class DCMLGraphDataset(musgconvDataset):
         self.stage = "validate"
         self._force_reload = force_reload
         self.include_measures = include_measures
-        self.prob_scores = ["Chopin-Etudes_op_25-2", 'Ravel-Gaspard_de_la_Nuit-1_Ondine']
+        self.prob_scores = ["l000_soirs", "l099_cahier", "l111-01_images_cloches", "l111-02_images_lune", "l111-03_images_poissons", "l117-11_preludes_danse", "l123-01_preludes_brouillards", "l123-02_preludes_feuilles", "l123-03_preludes_puerta", "l123-04_preludes_fees", "l123-05_preludes_bruyeres", "l123-06_preludes_general", "l123-07_preludes_terrasse", "l123-08_preludes_ondine", "l123-09_preludes_hommage", "l123-10_preludes_canope", "l123-11_preludes_tierces", "l123-12_preludes_feux", "l136-10_etudes_sonorites", "op43n06", "op34n03", "op35n04"]
         self.composer_to_label = dict()
         self.label_to_composer = dict()
         if verbose:
@@ -91,10 +91,6 @@ class DCMLGraphDataset(musgconvDataset):
                 note_array=note_array,
             )
             hg.y = composer
-            measures = score[np.array([p._quarter_durations[0] for p in score]).argmax()].measures
-            hg.add_beat_nodes()
-            hg.add_measure_nodes(measures)
-
             hg.save(self.save_path)
         return
 

@@ -4,7 +4,7 @@ import random
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, StochasticWeightAveraging
 from pytorch_lightning import Trainer
-from pytorch_lightning.tuner.tuning import Tuner
+# from pytorch_lightning.tuner.tuning import Tuner
 from musgconv.models.composer_clf import ComposerClassificationModelLightning
 from musgconv.data.datamodules.graph_classification import ComposerClassificationGraphDataModule
 # from pytorch_lightning.plugins import DDPPlugin
@@ -33,6 +33,7 @@ parser.add_argument("--model", type=str, default="RelEdgeConv", help="Block Conv
 parser.add_argument("--use_wandb", action="store_true", help="Use wandb")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions")
+parser.add_argument("--return_edge_emb", action="store_true", help="Input edge embeddings from the previous Encoder layer to the next.")
 parser.add_argument("--use_signed_features", action="store_true", help="Use singed instead of absolute edge features in the reledge model. It applies only when use_reledge is True")
 
 # for reproducibility
@@ -84,7 +85,7 @@ else:
         num_layers=n_layers, output_features=datamodule.n_classes, lr=args.lr, dropout=args.dropout,
         weight_decay=args.weight_decay, use_reledge=args.use_reledge, metrical=args.use_metrical,
         pitch_embedding=args.pitch_embedding, use_jk=args.use_jk, conv_block=args.model, stack_convs=args.stack_convs,
-        use_signed_features=args.use_signed_features)
+        use_signed_features=args.use_signed_features, return_edge_emb=args.return_edge_emb)
 
 
 checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="val_loss", mode="min")

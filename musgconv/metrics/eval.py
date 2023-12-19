@@ -48,7 +48,7 @@ class MultitaskAccuracy(Metric):
         super(MultitaskAccuracy, self).__init__()
         self.accs = torch.nn.ModuleDict()
         for task in tasks.keys():
-            self.accs[task] = Accuracy(ignore_index=ignore_index)
+            self.accs[task] = Accuracy(task="multiclass", ignore_index=ignore_index, num_classes=tasks[task])
 
     def update(self, pred, target):
         for task in self.accs.keys():

@@ -85,7 +85,7 @@ if args.use_wandb:
     wandb_logger.log_hyperparams(args)
 
 datamodule = st.data.AugmentedGraphDatamodule(
-    num_workers=16, include_synth=args.include_synth, num_tasks=args.num_tasks,
+    num_workers=args.num_workers, include_synth=args.include_synth, num_tasks=args.num_tasks,
     collection=args.collection, batch_size=args.batch_size, version=args.data_version, include_measures=args.use_metrical, transpose=args.transpose)
 model = st.models.chord.MetricalChordPrediction(
     datamodule.features, args.n_hidden, datamodule.tasks, args.n_layers, lr=args.lr, dropout=args.dropout,

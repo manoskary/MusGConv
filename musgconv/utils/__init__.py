@@ -8,9 +8,9 @@ edge_types = [
     ("note", "onset", "note"),
     ("note", "consecutive", "note"),
     ("note", "during", "note"),
-    ("note", "rests", "note"),
+    ("note", "rest", "note"),
     ("note", "consecutive_rev", "note"),
     ("note", "during_rev", "note"),
-    ("note", "rests_rev", "note"),
+    ("note", "rest_rev", "note"),
 ]
 METADATA = (node_types, edge_types)

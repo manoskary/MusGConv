@@ -45,7 +45,7 @@ class CadenceClassificationModel(nn.Module):
         else:
             raise ValueError("Block type not supported")
         kwargs["conv_block"] = block
-        self.etypes = {"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}
+        self.etypes = {"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}
 
         self.decoder_left = nn.Linear(hidden_features, hidden_features)
         self.decoder_right = nn.Linear(hidden_features, hidden_features)

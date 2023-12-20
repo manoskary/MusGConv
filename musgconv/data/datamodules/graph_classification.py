@@ -22,6 +22,7 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.force_reload = force_reload
         self.max_size = max_size
+        self.subgraph_size = max_size
         self.include_measures = include_measures
         self.normalize_features = True
         self.datasets = [
@@ -76,11 +77,6 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
     def collate_fn(self, batch):
         out = {}
         e = batch[0]
-        if self.include_measures:
-            out["beat_nodes"] = e["beat_nodes"].long().squeeze()
-            out["beat_edges"] = e["beat_edges"].long().squeeze()
-            out["measure_nodes"] = e["measure_nodes"].long().squeeze()
-            out["measure_edges"] = e["measure_edges"].long().squeeze()
         out["x"] = F.normalize(e["x"].squeeze(0).float()) if self.normalize_features else e["x"].squeeze(0).float()
         out["y"] = torch.tensor([e["y"]]).long()
         out["edge_index"] = e["edge_index"].squeeze(0)
@@ -103,11 +99,7 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
         measures = []
         measure_eindex = []
         for e in examples:
-            if self.include_measures:
-                beats.append(e["beat_nodes"].long())
-                beat_eindex.append(e["beat_edges"].long())
-                measures.append(e["measure_nodes"].long())
-                measure_eindex.append(e["measure_edges"].long())
+
             x.append(e["x"])
             lengths.append(e["x"].shape[0])
             edge_index.append(e["edge_index"])
@@ -124,54 +116,88 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
         out["edge_type"] = torch.cat([edge_types[i] for i in perm_idx], dim=0).long()
         out["y"] = torch.tensor([y[i] for i in perm_idx]).long()
         out["note_array"] = torch.cat([note_array[i] for i in perm_idx], dim=0).float()
-        if self.include_measures:
-            max_beat_idx = np.cumsum(np.array([0] + [beats[i].shape[0] for i in perm_idx]))
-            out["beat_nodes"] = torch.cat([beats[pi] + max_beat_idx[i] for i, pi in enumerate(perm_idx)], dim=0).long()
-            out["beat_lengths"] = torch.tensor(max_beat_idx).long()
-            out["beat_edges"] = torch.cat(
-                [torch.vstack((beat_eindex[pi][0] + max_idx[i], beat_eindex[pi][1] + max_beat_idx[i])) for i, pi in
-                 enumerate(perm_idx)], dim=1).long()
-            max_measure_idx = np.cumsum(np.array([0] + [measures[i].shape[0] for i in perm_idx]))
-            out["measure_nodes"] = torch.cat([measures[pi] + max_measure_idx[i] for i, pi in enumerate(perm_idx)],
-                                             dim=0).long()
-            out["measure_edges"] = torch.cat(
-                [torch.vstack((measure_eindex[pi][0] + max_idx[i], measure_eindex[pi][1] + max_measure_idx[i])) for
-                 i, pi in
-                 enumerate(perm_idx)], dim=1).long()
-            out["measure_lengths"] = torch.tensor(max_measure_idx).long()
         return out
 
     def train_dataloader(self):
-        for dataset in self.datasets:
-            dataset.set_split("train")
-        sampler = SubgraphCreationSampler(self.datasets[0], max_subgraph_size=self.max_size,
-                                          batch_size=self.batch_size, train_idx = self.train_idx_dict[0])
-        # self.dataset_train = ConcatDataset([self.datasets[k][self.train_idx_dict[k]] for k in self.train_idx_dict.keys()])
-        return torch.utils.data.DataLoader(
-            self.datasets[0],
-            batch_sampler=sampler,
-            batch_size=1,
-            num_workers=0,
-            collate_fn=self.collate_train_fn,
-            drop_last=False,
-            pin_memory=False,
-        )
+        print(f"Creating train dataloader with subgraph size {self.subgraph_size} and batch size {self.batch_size}")
+        # compute training graphs here to change the graphs that exceed max size.
+        training_graphs = [graph[0] for k in self.train_idx_dict.keys() for graph in
+                           self.datasets[k][self.train_idx_dict[k]]]
+        graph_sizes = np.array([g.num_nodes for g in training_graphs])
+        # Compute the number of times each graph should be repeated based on size
+        multiples = graph_sizes // self.subgraph_size + 1
+        # Create a list of indices repeating each graph the appropriate number of times
+        indices = np.concatenate([np.repeat(i, m) for i, m in enumerate(multiples)])
+        # Create the dataset by subgraphing each graph to the base size
+        dataset_train = list()
+        for idx in indices:
+            g = training_graphs[idx]
+            graph_length = g.num_nodes
+            if graph_length > self.subgraph_size:  # subgraph only if the size is bigger than the subgraph size
+                start = np.random.randint(0, graph_length - self.subgraph_size)
+                sub_g = g.subgraph({"note": torch.arange(start, start + self.subgraph_size, dtype=torch.long)})
+                dataset_train.append(sub_g)
+            else:  # otherwise insert the entire graph
+                dataset_train.append(g)
+        print(f"Passing {len(dataset_train)} subgraphs into the dataloader")
+
+        return PygDataLoader(dataset_train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+
+    # def train_dataloader(self):
+    #     for dataset in self.datasets:
+    #         dataset.set_split("train")
+    #     sampler = SubgraphCreationSampler(self.datasets[0], max_subgraph_size=self.max_size,
+    #                                       batch_size=self.batch_size, train_idx = self.train_idx_dict[0])
+    #     # self.dataset_train = ConcatDataset([self.datasets[k][self.train_idx_dict[k]] for k in self.train_idx_dict.keys()])
+    #     return torch.utils.data.DataLoader(
+    #         self.datasets[0],
+    #         batch_sampler=sampler,
+    #         batch_size=1,
+    #         num_workers=0,
+    #         collate_fn=self.collate_train_fn,
+    #         drop_last=False,
+    #         pin_memory=False,
+    #     )
 
     def val_dataloader(self):
-        for dataset in self.datasets:
-            dataset.set_split("train")
-        sampler = SubgraphCreationSampler(self.datasets[0], max_subgraph_size=self.max_size,
-                                          batch_size=self.batch_size, train_idx=self.val_idx_dict[0])
-        # self.dataset_train = ConcatDataset([self.datasets[k][self.train_idx_dict[k]] for k in self.train_idx_dict.keys()])
-        return torch.utils.data.DataLoader(
-            self.datasets[0],
-            batch_sampler=sampler,
-            batch_size=1,
-            num_workers=0,
-            collate_fn=self.collate_train_fn,
-            drop_last=False,
-            pin_memory=False,
-        )
+        # for dataset in self.datasets:
+        #     dataset.set_split("train")
+        # sampler = SubgraphCreationSampler(self.datasets[0], max_subgraph_size=self.max_size,
+        #                                   batch_size=self.batch_size, train_idx=self.val_idx_dict[0])
+        # # self.dataset_train = ConcatDataset([self.datasets[k][self.train_idx_dict[k]] for k in self.train_idx_dict.keys()])
+        # return torch.utils.data.DataLoader(
+        #     self.datasets[0],
+        #     batch_sampler=sampler,
+        #     batch_size=1,
+        #     num_workers=0,
+        #     collate_fn=self.collate_train_fn,
+        #     drop_last=False,
+        #     pin_memory=False,
+        # )
+
+        print(f"Creating val dataloader with subgraph size {self.subgraph_size} and batch size {self.batch_size}")
+        # compute training graphs here to change the graphs that exceed max size.
+        validation_graphs = [graph[0] for k in self.val_idx_dict.keys() for graph in
+                           self.datasets[k][self.val_idx_dict[k]]]
+        graph_sizes = np.array([g.num_nodes for g in validation_graphs])
+        # Compute the number of times each graph should be repeated based on size
+        multiples = graph_sizes // self.subgraph_size + 1
+        # Create a list of indices repeating each graph the appropriate number of times
+        indices = np.concatenate([np.repeat(i, m) for i, m in enumerate(multiples)])
+        # Create the dataset by subgraphing each graph to the base size
+        dataset_train = list()
+        for idx in indices:
+            g = validation_graphs[idx]
+            graph_length = g.num_nodes
+            if graph_length > self.subgraph_size:  # subgraph only if the size is bigger than the subgraph size
+                start = np.random.randint(0, graph_length - self.subgraph_size)
+                sub_g = g.subgraph({"note": torch.arange(start, start + self.subgraph_size, dtype=torch.long)})
+                dataset_train.append(sub_g)
+            else:  # otherwise insert the entire graph
+                dataset_train.append(g)
+        print(f"Passing {len(dataset_train)} subgraphs into the dataloader")
+
+        return PygDataLoader(dataset_train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
 
     def test_dataloader(self):
         for dataset in self.datasets:

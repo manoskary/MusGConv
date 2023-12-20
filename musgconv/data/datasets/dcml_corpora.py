@@ -3,6 +3,7 @@ from musgconv.data.dataset import BuiltinDataset, musgconvDataset
 from tqdm.contrib.concurrent import process_map
 import partitura as pt
 from musgconv.utils.hgraph import HeteroScoreGraph, hetero_graph_from_note_array, load_score_hgraph, select_features
+from musgconv.utils import score_graph_to_pyg
 from numpy.lib.recfunctions import structured_to_unstructured
 import numpy as np
 import torch
@@ -62,7 +63,7 @@ class DCMLGraphDataset(musgconvDataset):
         self.composer_to_label = dict()
         self.label_to_composer = dict()
         if verbose:
-            print("Loaded Asap Dataset Successfully, now processing...")
+            print("Loaded DCML Piano Corpus Successfully, now processing...")
         super(DCMLGraphDataset, self).__init__(
             name="DCMLGraphDataset",
             raw_dir=raw_dir,
@@ -78,7 +79,7 @@ class DCMLGraphDataset(musgconvDataset):
         score_fn, composer, score_name = data
         if score_name in self.prob_scores:
             return
-        if self._force_reload or not (os.path.exists(os.path.join(self.save_path, score_name))):
+        if self._force_reload or not (os.path.exists(os.path.join(self.save_path, score_name + ".pt"))):
             score = pt.load_score(score_fn)
             note_array = score.note_array(include_time_signature=True)
             note_features = select_features(note_array, "voice")
@@ -91,7 +92,13 @@ class DCMLGraphDataset(musgconvDataset):
                 note_array=note_array,
             )
             hg.y = composer
-            hg.save(self.save_path)
+            pg_graph = score_graph_to_pyg(hg)
+            if not os.path.exists(self.save_path):
+                os.makedirs(self.save_path)
+            file_path = os.path.join(self.save_path, pg_graph["name"] + ".pt")
+            # add global composer label to the graph
+            pg_graph["y"] = composer
+            torch.save(pg_graph, file_path)
         return
 
     def save(self):
@@ -105,7 +112,7 @@ class DCMLGraphDataset(musgconvDataset):
             if fn in self.prob_scores:
                 continue
             path_graph = os.path.join(self.save_path, fn)
-            graph = load_score_hgraph(path_graph, fn)
+            graph = torch.load(path_graph)
             composer = graph.y
             # filter composer list
             if composer in rejected_composers:
@@ -127,11 +134,17 @@ class DCMLGraphDataset(musgconvDataset):
     def __len__(self):
         return len(self.graphs)
 
-
     def __getitem__(self, idx):
-        if isinstance(idx, int):
-            return self.get_graph_attr(idx, self.stage == "train")
-        return [self.get_graph_attr(i, self.stage == "train") for i in idx]
+        out = []
+        for i in idx:
+            y = self.composer_to_label[self.graphs[i].y]
+            self.graphs[i].y = y
+            out.append([self.graphs[i]])
+
+        return [[self.graphs[i]] for i in idx]
+        # if isinstance(idx, int):
+        #     return self.get_graph_attr(idx, self.stage == "train")
+        # return [self.get_graph_attr(i, self.stage == "train") for i in idx]
 
     def set_split(self, stage="train"):
         self.stage = stage
@@ -190,7 +203,7 @@ class DCMLGraphDataset(musgconvDataset):
 
     @property
     def features(self):
-        return self.graphs[0].x.shape[1]
+        return self.graphs[0]["note"].x.shape[-1]
 
     @property
     def n_classes(self):

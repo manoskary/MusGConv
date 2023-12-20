@@ -208,7 +208,7 @@ class LinkPredictionModel(nn.Module):
 
 
 class HeteroLinkPredictionModel(nn.Module):
-    def __init__(self, in_feats, n_hidden, n_layers, activation=F.relu, dropout=0.5, alpha=3.1, etypes={"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}, smote=False, block="ResConv", jk=True):
+    def __init__(self, in_feats, n_hidden, n_layers, activation=F.relu, dropout=0.5, alpha=3.1, etypes={"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}, smote=False, block="ResConv", jk=True):
         super(HeteroLinkPredictionModel, self).__init__()
         self.n_hidden = n_hidden
         self.layers = nn.ModuleList()
@@ -269,7 +269,7 @@ class HeteroLinkPredictionModel(nn.Module):
 
 
 class MetricalLinkPredictionModel(nn.Module):
-    def __init__(self, in_feats, n_hidden, n_layers, activation=F.relu, dropout=0.5, alpha=3.1, etypes={"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}, smote=False, block="ResConv", jk=True, use_reledge=False, use_metrical=False, **kwargs):
+    def __init__(self, in_feats, n_hidden, n_layers, activation=F.relu, dropout=0.5, alpha=3.1, etypes={"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}, smote=False, block="ResConv", jk=True, use_reledge=False, use_metrical=False, **kwargs):
         super(MetricalLinkPredictionModel, self).__init__()
         self.n_hidden = n_hidden
         self.normalize = nn.LayerNorm(n_hidden)

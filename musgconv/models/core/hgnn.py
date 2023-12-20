@@ -136,7 +136,7 @@ class HeteroSageConvLayer(nn.Module):
 
 
 class HGCN(nn.Module):
-    def __init__(self, in_feats, n_hidden, out_feats, n_layers, etypes={"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}, activation=F.relu, dropout=0.5, jk=False):
+    def __init__(self, in_feats, n_hidden, out_feats, n_layers, etypes={"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}, activation=F.relu, dropout=0.5, jk=False):
         super(HGCN, self).__init__()
         self.n_hidden = n_hidden
         self.layers = nn.ModuleList()
@@ -174,7 +174,7 @@ class HGCN(nn.Module):
 
 
 class HResGatedConv(nn.Module):
-    def __init__(self, in_feats, n_hidden, out_feats, n_layers, etypes={"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}, activation=F.relu, dropout=0.5, jk=False):
+    def __init__(self, in_feats, n_hidden, out_feats, n_layers, etypes={"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}, activation=F.relu, dropout=0.5, jk=False):
         super(HResGatedConv, self).__init__()
         self.n_hidden = n_hidden
         self.layers = nn.ModuleList()
@@ -214,7 +214,7 @@ class HResGatedConv(nn.Module):
 class HGPSLayer(nn.Module):
     def __init__(
             self, in_features, out_features, num_heads,
-            etypes={"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6},
+            etypes={"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6},
             activation=F.relu, dropout=0.2, bias=True):
         """
         General Powerful Scalable Graph Transformers Convolutional Layer
@@ -282,7 +282,7 @@ class HGPSLayer(nn.Module):
 
 
 class HGPS(nn.Module):
-    def __init__(self, in_feats, n_hidden, out_feats, n_layers, etypes={"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}, activation=F.relu, dropout=0.5, jk=False):
+    def __init__(self, in_feats, n_hidden, out_feats, n_layers, etypes={"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}, activation=F.relu, dropout=0.5, jk=False):
         super(HGPS, self).__init__()
         self.n_hidden = n_hidden
         self.layers = nn.ModuleList()

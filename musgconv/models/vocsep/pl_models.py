@@ -265,7 +265,7 @@ class MetricalVoiceLinkPredictionModel(VocSepLightningModule):
             MetricalLinkPredictionModel,
             **kwargs
         )
-        self.etypes = {"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}
+        self.etypes = {"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}
         self.use_signed_features = kwargs.get("use_signed_features", False)
         pitch_embedding = kwargs.get("pitch_embedding", None)
         self.pitch_embedding = torch.nn.Embedding(12, 16) if pitch_embedding is not None else pitch_embedding

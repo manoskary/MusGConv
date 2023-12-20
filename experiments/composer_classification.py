@@ -29,7 +29,7 @@ parser.add_argument("--batch_size", type=int, default=200, help="Batch size")
 parser.add_argument("--use_reledge", action="store_true", help="Use reledge")
 parser.add_argument("--use_metrical", action="store_true", help="Use metrical graphs")
 parser.add_argument("--pitch_embedding", type=int, default=None, help="Pitch embedding size to use")
-parser.add_argument("--model", type=str, default="RelEdgeConv", help="Block Convolution Model to use")
+parser.add_argument("--model", type=str, default="MusGConv", help="Block Convolution Model to use")
 parser.add_argument("--use_wandb", action="store_true", help="Use wandb")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions")
@@ -39,7 +39,7 @@ parser.add_argument("--use_signed_features", action="store_true", help="Use sing
 # for reproducibility
 torch.manual_seed(0)
 random.seed(0)
-torch.use_deterministic_algorithms(True)
+# torch.use_deterministic_algorithms(True)
 # seed_everything(seed=0, workers=True)
 
 args = parser.parse_args()

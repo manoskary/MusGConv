@@ -45,7 +45,7 @@ parser.add_argument("--use_signed_features", action="store_true", help="Use sing
 # for reproducibility
 torch.manual_seed(0)
 random.seed(0)
-torch.use_deterministic_algorithms(True)
+# torch.use_deterministic_algorithms(True)
 # seed_everything(seed=0, workers=True)
 
 

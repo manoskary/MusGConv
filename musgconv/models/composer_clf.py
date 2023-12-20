@@ -4,7 +4,7 @@ from musgconv.models.core.hgnn import MetricalGNN
 from musgconv.utils import add_reverse_edges_from_edge_index
 from torchmetrics import Accuracy, F1Score
 from musgconv.utils import METADATA
-from torch_geometric.nn import to_hetero
+from torch_geometric.nn import to_hetero, global_mean_pool
 from musgconv.models.core.utils import HeteroMusGConvEncoder, SageEncoder, GATEncoder, ResGatedConvEncoder
 
 
@@ -21,7 +21,7 @@ class ComposerClassificationModel(nn.Module):
         self.output_features = output_features
         pitch_embeddding = kwargs.get("pitch_embedding", 0)
         pitch_embeddding = 0 if pitch_embeddding is None else pitch_embeddding
-        self.in_edge_features = 6 + pitch_embeddding
+        self.in_edge_features = 5 + pitch_embeddding
         block = kwargs.get("conv_block", "SageConv")
         if block == "ResConv":
             print("Using ResGatedGraphConv")
@@ -41,13 +41,24 @@ class ComposerClassificationModel(nn.Module):
         else:
             raise ValueError("Block type not supported")
         kwargs["conv_block"] = block
-        self.clf = nn.Linear(hidden_features, output_features)
+        self.clf = nn.Sequential(
+            nn.Linear(hidden_features, hidden_features // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_features // 2, output_features))
+        self.reset_parameters()
 
     def reset_parameters(self):
         self.encoder.reset_parameters()
-        self.clf.reset_parameters()
+        self.clf[0].reset_parameters()
+        self.clf[3].reset_parameters()
 
-    def forward(self, x_dict, edge_dict, edge_feature_dict, **kwargs):
+    def forward(self, x_dict, edge_dict, edge_feature_dict, batch, **kwargs):
+        h = self.encoder(x_dict, edge_dict, edge_feature_dict)["note"]
+        sg = global_mean_pool(h, batch)
+        return self.clf(sg)
+
+    def forward_old(self, x_dict, edge_dict, edge_feature_dict, **kwargs):
         h = self.encoder(x_dict, edge_dict, edge_feature_dict)["note"]
         lengths = kwargs["lengths"].tolist() if isinstance(kwargs["lengths"], torch.Tensor) else kwargs["lengths"]
         sg = torch.split(h, lengths)
@@ -69,8 +80,8 @@ class ComposerClassificationModelLightning(LightningModule):
                                                   activation=activation, dropout=dropout,
                                                   use_reledge=use_reledge, metrical=metrical, **kwargs)
         pitch_embedding = kwargs.get("pitch_embedding", None)
-        self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rests": 3, "consecutive_rev": 4, "during_rev": 5,
-                       "rests_rev": 6}
+        self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rest": 3, "consecutive_rev": 4, "during_rev": 5,
+                       "rest_rev": 6}
         self.pitch_embedding = torch.nn.Embedding(12, 16) if pitch_embedding is not None else pitch_embedding
         self.lr = lr
         self.weight_decay = weight_decay
@@ -89,33 +100,61 @@ class ComposerClassificationModelLightning(LightningModule):
 
     def training_step(self, *args, **kwargs):
         y_hat, y = self.common_step(*args, **kwargs)
+        batch_size = y_hat.shape[0]
         loss = self.train_loss(y_hat, y)
         acc = self.train_acc(y_hat, y)
-        self.log("train_loss", loss.item(), prog_bar=True, on_epoch=True, on_step=False)
-        self.log("train_acc", acc.item(), prog_bar=True, on_epoch=True, on_step=False)
+        self.log("train_loss", loss.item(), batch_size=batch_size, prog_bar=True, on_epoch=True, on_step=False)
+        self.log("train_acc", acc.item(), batch_size=batch_size, prog_bar=True, on_epoch=True, on_step=False)
         return loss
 
     def validation_step(self, *args, **kwargs):
         y_hat, y = self.common_step(*args, **kwargs)
+        batch_size = y_hat.shape[0]
         loss = F.cross_entropy(y_hat, y)
         acc = self.val_acc(y_hat, y)
         fscore = self.val_f1(y_hat, y)
-        self.log("val_loss", loss.item(), batch_size=1, prog_bar=True, on_epoch=True)
-        self.log("val_acc", acc.item(), batch_size=1, prog_bar=True, on_epoch=True)
-        self.log("val_f1", fscore.item(), batch_size=1, prog_bar=True, on_epoch=True)
+        self.log("val_loss", loss.item(), batch_size=batch_size, prog_bar=True, on_epoch=True)
+        self.log("val_acc", acc.item(), batch_size=batch_size, prog_bar=True, on_epoch=True)
+        self.log("val_f1", fscore.item(), batch_size=batch_size, prog_bar=True, on_epoch=True)
         return loss
 
     def test_step(self, *args, **kwargs):
         y_hat, y = self.common_step(*args, **kwargs)
+        batch_size = y_hat.shape[0]
         loss = F.cross_entropy(y_hat, y)
         acc = self.test_acc(y_hat, y)
         fscore = self.test_f1(y_hat, y)
-        self.log("test_loss", loss.item(), batch_size=1)
-        self.log("test_acc", acc.item(), batch_size=1)
-        self.log("test_f1", fscore.item(), batch_size=1)
+        self.log("test_loss", loss.item(), batch_size=batch_size)
+        self.log("test_acc", acc.item(), batch_size=batch_size)
+        self.log("test_f1", fscore.item(), batch_size=batch_size)
         return loss
 
     def common_step(self, batch, batch_idx):
+        y = batch["y"]
+        x_dict = batch.x_dict
+        edge_index_dict = batch.edge_index_dict
+        # add reverse edges
+        reverse_edges = {(k[0], k[1] + "_rev", k[2]): torch.vstack((v[1], v[0])) for k, v in edge_index_dict.items() if k[1] != "onset"}
+        edge_index_dict.update(reverse_edges)
+        note_array = torch.vstack((batch["note"].pitch, batch["note"].onset_div, batch["note"].duration_div,
+                                batch["note"].onset_beat, batch["note"].duration_beat)).t()
+        edge_feature_dict = {}
+        if self.use_reledge:
+            for k, edges in edge_index_dict.items():
+                edge_features = note_array[edges[1]] - note_array[edges[0]]
+                edge_features = edge_features if self.use_signed_features else torch.abs(edge_features)
+                edge_features = F.normalize(edge_features, dim=0)
+                edge_feature_dict[k] = edge_features
+        else:
+            edge_features = None
+        if self.pitch_embedding is not None and edge_features is not None:
+            for k, edges in edge_index_dict.items():
+                pitch = self.pitch_embedding(torch.remainder(note_array[:, 0][edges[0]] - note_array[:, 0][edges[1]], 12).long())
+                edge_feature_dict[k] = torch.cat([edge_feature_dict[k], pitch], dim=1)
+        y_hat = self.module(x_dict, edge_index_dict, edge_feature_dict, batch=batch["note"].batch)
+        return y_hat, y
+
+    def common_step_old(self, batch, batch_idx):
         """ batch is dict with keys the variable names"""
         if batch["y"].shape[0] > 1:
             y = batch["y"]

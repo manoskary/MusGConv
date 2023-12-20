@@ -278,7 +278,7 @@ class ChordEncoder(nn.Module):
         # self.embedding = nn.Linear(in_feats-1, n_hidden)
         self.encoder = HGCN(64, n_hidden*2, n_hidden, n_layers, activation=activation, dropout=dropout, jk=use_jk)
         # self.encoder = HResGatedConv(64, n_hidden*2, n_hidden, n_layers, activation=activation, dropout=dropout, jk=use_jk)
-        # self.etypes = {"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}
+        # self.etypes = {"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}
         # self.encoder = HeteroResGatedGraphConvLayer(n_hidden, n_hidden, etypes=self.etypes, reduction="none")
         # self.reduction = HeteroAttention(n_hidden, len(self.etypes.keys()))
         self.pool = OnsetEdgePoolingVersion2(n_hidden, dropout=dropout)
@@ -342,7 +342,7 @@ class ChordEncoder(nn.Module):
         # self.embedding = nn.Linear(in_feats-1, n_hidden)
         self.encoder = HGCN(64, n_hidden*2, n_hidden, n_layers, activation=activation, dropout=dropout, jk=use_jk)
         # self.encoder = HResGatedConv(64, n_hidden*2, n_hidden, n_layers, activation=activation, dropout=dropout, jk=use_jk)
-        # self.etypes = {"onset":0, "consecutive":1, "during":2, "rests":3, "consecutive_rev":4, "during_rev":5, "rests_rev":6}
+        # self.etypes = {"onset":0, "consecutive":1, "during":2, "rest":3, "consecutive_rev":4, "during_rev":5, "rest_rev":6}
         # self.encoder = HeteroResGatedGraphConvLayer(n_hidden, n_hidden, etypes=self.etypes, reduction="none")
         # self.reduction = HeteroAttention(n_hidden, len(self.etypes.keys()))
         self.pool = OnsetEdgePoolingVersion2(n_hidden, dropout=dropout)
@@ -403,8 +403,8 @@ class MetricalChordEncoder(nn.Module):
         self.spelling_embedding = nn.Embedding(49, 16)
         self.pitch_embedding = nn.Embedding(128, 16)
         self.embedding = nn.Linear(in_feats-3, 32)
-        self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rests": 3, "consecutive_rev": 4, "during_rev": 5,
-                       "rests_rev": 6}
+        self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rest": 3, "consecutive_rev": 4, "during_rev": 5,
+                       "rest_rev": 6}
         # self.embedding = nn.Linear(in_feats-1, n_hidden)
         pitch_embeddding = kwargs.get("pitch_embedding", 0)
         pitch_embeddding = 0 if pitch_embeddding is None else pitch_embeddding
@@ -1076,6 +1076,8 @@ class MetricalChordPrediction(LightningModule):
         self.save_hyperparameters()
         self.num_tasks = len(tasks.keys())
         self.use_reledge = use_reledge
+        self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rest": 3, "consecutive_rev": 4, "during_rev": 5,
+                       "rest_rev": 6}
         self.use_signed_features = kwargs.get("use_signed_features", False)
         self.module = MetricalChordPredictionModel(
             in_feats, n_hidden, tasks, n_layers, activation, dropout,
@@ -1087,7 +1089,7 @@ class MetricalChordPrediction(LightningModule):
         self.test_roman = list()
         self.test_roman_ts = list()
         self.train_loss = MultiTaskLoss(
-            list(tasks.keys()), nn.ModuleDict({task: nn.CrossEntropyLoss(ignore_index=-1) for task in tasks.keys()}), requires_grad=weight_loss)
+            list(tasks.keys()), nn.ModuleDict({task: nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=0.1) for task in tasks.keys()}), requires_grad=weight_loss)
         self.val_loss = MultiTaskLoss(
             list(tasks.keys()), nn.ModuleDict({task: nn.CrossEntropyLoss() for task in tasks.keys()}), requires_grad=False)
         self.test_acc = MultitaskAccuracy(tasks)

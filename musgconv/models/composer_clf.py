@@ -46,12 +46,6 @@ class ComposerClassificationModel(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_features // 2, output_features))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        self.encoder.reset_parameters()
-        self.clf[0].reset_parameters()
-        self.clf[3].reset_parameters()
 
     def forward(self, x_dict, edge_dict, edge_feature_dict, batch, **kwargs):
         h = self.encoder(x_dict, edge_dict, edge_feature_dict)["note"]

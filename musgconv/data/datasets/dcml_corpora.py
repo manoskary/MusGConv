@@ -137,7 +137,7 @@ class DCMLGraphDataset(musgconvDataset):
     def __getitem__(self, idx):
         out = []
         for i in idx:
-            y = self.composer_to_label[self.graphs[i].y]
+            y = self.composer_to_label[self.graphs[i].y]  if not isinstance(self.graphs[i].y, int) else self.graphs[i].y
             self.graphs[i].y = y
             out.append([self.graphs[i]])
 

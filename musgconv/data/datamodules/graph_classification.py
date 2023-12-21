@@ -15,13 +15,15 @@ from .mix_vs import idx_tuple_to_dict
 
 class ComposerClassificationGraphDataModule(LightningDataModule):
     def __init__(
-            self, batch_size=50, num_workers=4, force_reload=False, test_collections=None, max_size=200, include_measures=False
+            self, batch_size=50, num_workers=4, force_reload=False, test_collections=None, max_size=200, include_measures=False, **kwargs
     ):
         super(ComposerClassificationGraphDataModule, self).__init__()
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.force_reload = force_reload
         self.max_size = max_size
+        # How many times should the subgraph be sampled for each graph compared to the integer division of the graph size by the subgraph size
+        self.subgraph_ratio = kwargs.get("subgraph_ratio", 2)
         self.subgraph_size = max_size
         self.include_measures = include_measures
         self.normalize_features = True
@@ -56,7 +58,7 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
             traintest_idx_collections = [
                 self.datasets[self.datasets_map[i][0]].graphs[self.datasets_map[i][1]].y for i in
                 traintest_idx]
-            trainval_idx, test_idx = train_test_split(traintest_idx, test_size=0.1, stratify=traintest_idx_collections,
+            trainval_idx, test_idx = train_test_split(traintest_idx, test_size=0.2, stratify=traintest_idx_collections,
                                                   random_state=0)
         trainval_idx = [i for i in idxs if i not in test_idx]
         trainval_collections = [
@@ -125,7 +127,7 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
                            self.datasets[k][self.train_idx_dict[k]]]
         graph_sizes = np.array([g.num_nodes for g in training_graphs])
         # Compute the number of times each graph should be repeated based on size
-        multiples = graph_sizes // self.subgraph_size + 1
+        multiples = ((graph_sizes // self.subgraph_size) + 1)*self.subgraph_ratio
         # Create a list of indices repeating each graph the appropriate number of times
         indices = np.concatenate([np.repeat(i, m) for i, m in enumerate(multiples)])
         # Create the dataset by subgraphing each graph to the base size
@@ -175,13 +177,13 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
         #     pin_memory=False,
         # )
 
-        print(f"Creating val dataloader with subgraph size {self.subgraph_size} and batch size {self.batch_size}")
+        # print(f"Creating val dataloader with subgraph size {self.subgraph_size} and batch size {self.batch_size}")
         # compute training graphs here to change the graphs that exceed max size.
         validation_graphs = [graph[0] for k in self.val_idx_dict.keys() for graph in
                            self.datasets[k][self.val_idx_dict[k]]]
         graph_sizes = np.array([g.num_nodes for g in validation_graphs])
         # Compute the number of times each graph should be repeated based on size
-        multiples = graph_sizes // self.subgraph_size + 1
+        multiples = ((graph_sizes // self.subgraph_size) + 1)*self.subgraph_ratio
         # Create a list of indices repeating each graph the appropriate number of times
         indices = np.concatenate([np.repeat(i, m) for i, m in enumerate(multiples)])
         # Create the dataset by subgraphing each graph to the base size
@@ -200,17 +202,22 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
         return PygDataLoader(dataset_train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
 
     def test_dataloader(self):
-        for dataset in self.datasets:
-            dataset.set_split("train")
-        sampler = SubgraphCreationSampler(self.datasets[0], max_subgraph_size=self.max_size,
-                                          batch_size=self.batch_size, train_idx=self.test_idx_dict[0])
-        # self.dataset_train = ConcatDataset([self.datasets[k][self.train_idx_dict[k]] for k in self.train_idx_dict.keys()])
-        return torch.utils.data.DataLoader(
-            self.datasets[0],
-            batch_sampler=sampler,
-            batch_size=1,
-            num_workers=0,
-            collate_fn=self.collate_train_fn,
-            drop_last=False,
-            pin_memory=False,
-        )
+        test_graphs = [graph[0] for k in self.test_idx_dict.keys() for graph in
+                             self.datasets[k][self.test_idx_dict[k]]]
+        graph_sizes = np.array([g.num_nodes for g in test_graphs])
+        # Compute the number of times each graph should be repeated based on size
+        multiples = ((graph_sizes // self.subgraph_size) + 1)*self.subgraph_ratio
+        # Create a list of indices repeating each graph the appropriate number of times
+        indices = np.concatenate([np.repeat(i, m) for i, m in enumerate(multiples)])
+        # Create the dataset by subgraphing each graph to the base size
+        dataset_train = list()
+        for idx in indices:
+            g = test_graphs[idx]
+            graph_length = g.num_nodes
+            if graph_length > self.subgraph_size:  # subgraph only if the size is bigger than the subgraph size
+                start = np.random.randint(0, graph_length - self.subgraph_size)
+                sub_g = g.subgraph({"note": torch.arange(start, start + self.subgraph_size, dtype=torch.long)})
+                dataset_train.append(sub_g)
+            else:  # otherwise insert the entire graph
+                dataset_train.append(g)
+        print(f"Passing {len(dataset_train)} subgraphs into the dataloader")

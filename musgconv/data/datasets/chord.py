@@ -213,8 +213,8 @@ class ChordGraphDataset(musgconvDataset):
 
 class AugmentedNetChordGraphDataset(ChordGraphDataset):
     def __init__(self, raw_dir=None, force_reload=False,
-                 verbose=True, nprocs=4, include_synth=False, num_tasks=11,
-                 collection="all", max_size=512, include_measures=False, transpose=False):
+                 verbose=True, nprocs=4, include_synth=True, num_tasks=11,
+                 collection="all", max_size=512, include_measures=False, transpose=True):
         dataset_base = AugmentedNetChordDataset(raw_dir=raw_dir)
         self.collection = collection
         # Collection is one of ["abc", "bps", "haydnop20", "wir", "wirwtc", "tavern"]
@@ -255,15 +255,17 @@ class AugmentedNetChordGraphDataset(ChordGraphDataset):
 
         if os.path.join("AugmentedNetChordDataset", "dataset-synth") in score_fn and os.path.basename(os.path.dirname(score_fn)) in ["test"]:
             return
-        collection = "training" if os.path.basename(
-            os.path.dirname(score_fn)) == "validation" else os.path.basename(os.path.dirname(score_fn))
-        if collection == "test" or not self.transpose:
+        collection = os.path.basename(os.path.dirname(score_fn))
+        if collection in ["test", "validation"]:
             note_array, labels, measures = time_divided_tsv_to_part(score_fn, transpose=False)
             data_to_graph(note_array, labels, collection, name, save_path=self.save_path, measures=measures)
-        else:
+        elif self.transpose:
             x = time_divided_tsv_to_part(score_fn, transpose=True)
             for i, (note_array, labels, measures) in enumerate(x):
-                data_to_graph(note_array, labels, collection, (name + "-{}".format(i) if i > 0 else name), save_path=self.save_path, measures=measures)
+                data_to_graph(note_array, labels, collection, (name + "-trans-{}".format(i) if i > 0 else name), save_path=self.save_path, measures=measures)
+        else:
+            note_array, labels, measures = time_divided_tsv_to_part(score_fn, transpose=False)
+            data_to_graph(note_array, labels, collection, name, save_path=self.save_path, measures=measures)
         return
 
 

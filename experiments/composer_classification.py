@@ -20,12 +20,13 @@ parser.add_argument('--dropout', type=float, default=0.5)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--weight_decay', type=float, default=5e-4)
 parser.add_argument("--num_workers", type=int, default=20)
+parser.add_argument("--n_epochs", type=int, default=100, help="Number of epochs to train for")
 parser.add_argument("--load_from_checkpoint", action="store_true", help="Load model from WANDB checkpoint")
 parser.add_argument("--force_reload", action="store_true", help="Force reload of the data")
 parser.add_argument("--use_jk", action="store_true", help="Use Jumping Knowledge")
 parser.add_argument("--tags", type=str, default="", help="Tags to add to the WandB run api")
 parser.add_argument("--homogeneous", action="store_true", help="Use homogeneous graphs")
-parser.add_argument("--batch_size", type=int, default=200, help="Batch size")
+parser.add_argument("--batch_size", type=int, default=1000, help="Batch size")
 parser.add_argument("--use_reledge", action="store_true", help="Use reledge")
 parser.add_argument("--use_metrical", action="store_true", help="Use metrical graphs")
 parser.add_argument("--pitch_embedding", type=int, default=None, help="Pitch embedding size to use")
@@ -65,9 +66,9 @@ if args.use_wandb:
     wandb_logger = WandbLogger(
         log_model=True,
         entity=args.wandb_entity,
-        project="Relational Edge Convolution",
+        project="MusGConv",
         group=f"Composer Classification",
-        job_type=f"Relative - {'wPE' if args.pitch_embedding is not None else ''}" if args.use_reledge else "Absolute",
+        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}",
         # tags=tags,
         name=name)
     wandb_logger.log_hyperparams(args)
@@ -88,10 +89,10 @@ else:
         use_signed_features=args.use_signed_features, return_edge_emb=args.return_edge_emb)
 
 
-checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="val_loss", mode="min")
+checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="val_f1", mode="max")
 # swa_callback = StochasticWeightAveraging(swa_lrs=1e-2)
 trainer = Trainer(
-    max_epochs=100, accelerator="auto", devices=devices,
+    max_epochs=args.n_epochs, accelerator="auto", devices=devices,
     num_sanity_val_steps=1,
     logger=wandb_logger if args.use_wandb else None,
     # plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,

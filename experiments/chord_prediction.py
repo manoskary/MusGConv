@@ -35,7 +35,7 @@ parser.add_argument("--transpose", action="store_true", help="Transpose the trai
 parser.add_argument("--use_reledge", action="store_true", help="Use relative edge features.")
 parser.add_argument("--use_metrical", action="store_true", help="Use metrical features.")
 parser.add_argument("--pitch_embedding", type=int, default=None, help="Pitch embedding size to use")
-parser.add_argument("--model", type=str, default="RelEdgeConv", help="Block Convolution Model to use")
+parser.add_argument("--model", type=str, default="MusGConv", choices=["MusGConv", "SageConv", "GatConv", "ResConv"], help="Block Convolution Model to use")
 parser.add_argument("--use_wandb", action="store_true", help="Use wandb for logging.")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions in the model.")
@@ -71,15 +71,18 @@ name = "{}-{}x{}-lr={}-wd={}-dr={}".format(args.model, n_layers, n_hidden,
 use_nade = args.mtl_norm == "NADE"
 use_rotograd = args.mtl_norm == "Rotograd"
 use_gradnorm = args.mtl_norm == "GradNorm"
+args.include_synth = True
+args.transpose = True
 weight_loss = args.mtl_norm not in ["Neutral", "Rotograd", "GradNorm"]
+args.model
 
 if args.use_wandb:
     wandb_logger = WandbLogger(
         log_model=True,
         entity=args.wandb_entity,
-        project="Relational Edge Convolution",
+        project="MusGConv",
         group=f"Roman Numeral Analysis",
-        job_type=f"Relative - {'wPE' if args.pitch_embedding is not None else ''}" if args.use_reledge else "Absolute",
+        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}",
         # tags=tags,
         name=name)
     wandb_logger.log_hyperparams(args)

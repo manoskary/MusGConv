@@ -80,9 +80,9 @@ if args.use_wandb:
     wandb_logger = WandbLogger(
         log_model=True,
         entity=args.wandb_entity,
-        project="Relational Edge Convolution",
+        project="MusGConv",
         group=f"Cadence Classification",
-        job_type=f"Relative - {'wPE' if args.pitch_embedding is not None else ''}" if args.use_reledge else "Absolute",
+        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}",
         # tags=tags,
         name=name)
     wandb_logger.log_hyperparams(args)

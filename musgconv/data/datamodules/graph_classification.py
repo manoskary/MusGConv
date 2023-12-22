@@ -220,4 +220,5 @@ class ComposerClassificationGraphDataModule(LightningDataModule):
                 dataset_train.append(sub_g)
             else:  # otherwise insert the entire graph
                 dataset_train.append(g)
-        print(f"Passing {len(dataset_train)} subgraphs into the dataloader")
+
+        return PygDataLoader(dataset_train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)

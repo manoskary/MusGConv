@@ -149,11 +149,13 @@ class OnsetEdgePoolingVersion2(nn.Module):
     def __init__(self, in_channels, dropout=0):
         super(OnsetEdgePoolingVersion2, self).__init__()
         self.in_channels = in_channels
-        self.trans = nn.Linear(in_channels, in_channels)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        self.trans.reset_parameters()
+        self.trans = nn.Sequential(
+            nn.Linear(in_channels, in_channels),
+            nn.BatchNorm1d(in_channels),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(in_channels, in_channels),
+        )
 
     def forward(self, x, edge_index, idx=None):
         """Forward computation which computes the raw edge score, normalizes
@@ -302,7 +304,7 @@ class ChordEncoder(nn.Module):
         self.layernorm1.reset_parameters()
         self.layernorm2.reset_parameters()
         self.encoder.reset_parameters()
-        self.pool.reset_parameters()
+        # self.pool.reset_parameters()
 
     def forward(self, batch):
         x, edge_index, edge_type, onset_index, onset_idx, lengths = batch
@@ -366,7 +368,7 @@ class ChordEncoder(nn.Module):
         self.layernorm1.reset_parameters()
         self.layernorm2.reset_parameters()
         self.encoder.reset_parameters()
-        self.pool.reset_parameters()
+        # self.pool.reset_parameters()
 
     def forward(self, batch):
         x, edge_index, edge_type, onset_index, onset_idx, lengths = batch
@@ -397,7 +399,7 @@ class ChordEncoder(nn.Module):
 
 
 class MetricalChordEncoder(nn.Module):
-    def __init__(self, in_feats, n_hidden, n_layers, activation=F.relu, dropout=0.5, use_jk=False, metrical=False, use_reledge=False, **kwargs):
+    def __init__(self, in_feats, n_hidden, n_layers, activation=F.relu, dropout=0.5, use_jk=False, metrical=False, **kwargs):
         super(MetricalChordEncoder, self).__init__()
         self.activation = activation
         self.spelling_embedding = nn.Embedding(49, 16)
@@ -406,25 +408,26 @@ class MetricalChordEncoder(nn.Module):
         self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rest": 3, "consecutive_rev": 4, "during_rev": 5,
                        "rest_rev": 6}
         # self.embedding = nn.Linear(in_feats-1, n_hidden)
-        pitch_embeddding = kwargs.get("pitch_embedding", 0)
-        pitch_embeddding = 0 if pitch_embeddding is None else pitch_embeddding
+        pitch_embedding = kwargs.get("pitch_embedding", 0)
         return_edge_emb = kwargs.get("return_edge_emb", False)
         block = kwargs.get("conv_block", "SageConv")
+        self.use_rel_edge = kwargs.get("use_reledge", False)
+        self.in_edge_features = 3+pitch_embedding if self.use_rel_edge else 0
         if block == "ResConv":
             print("Using ResGatedGraphConv")
-            enc = ResGatedConvEncoder(64+pitch_embeddding, n_hidden, n_layers=n_layers, dropout=dropout, activation=activation)
+            enc = ResGatedConvEncoder(64, n_hidden, n_layers=n_layers, dropout=dropout, activation=activation)
             self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
         elif block == "SageConv" or block == "Sage" or block is None:
             print("Using SageConv")
-            enc = SageEncoder(64+pitch_embeddding, n_hidden, n_layers=n_layers, dropout=dropout, activation=activation)
+            enc = SageEncoder(64, n_hidden, n_layers=n_layers, dropout=dropout, activation=activation)
             self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
         elif block == "GAT" or block == "GATConv":
             print("Using GATConv")
-            enc = GATEncoder(64+pitch_embeddding, n_hidden, n_layers=n_layers, dropout=dropout, activation=activation)
+            enc = GATEncoder(64, n_hidden, n_layers=n_layers, dropout=dropout, activation=activation)
             self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
-        elif block == "RelEdgeConv":
-            self.encoder = HeteroMusGConvEncoder(64+pitch_embeddding, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation,
-                                               in_edge_features=pitch_embeddding, return_edge_emb=return_edge_emb)
+        elif block == "RelEdgeConv" or block == "MusGConv":
+            self.encoder = HeteroMusGConvEncoder(64, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation,
+                                               in_edge_features=self.in_edge_features, return_edge_emb=return_edge_emb)
         else:
             raise ValueError("Block type not supported")
         kwargs["conv_block"] = block
@@ -453,8 +456,8 @@ class MetricalChordEncoder(nn.Module):
         self.layernormgru.reset_parameters()
         self.layernorm1.reset_parameters()
         self.layernorm2.reset_parameters()
-        self.encoder.reset_parameters()
-        self.pool.reset_parameters()
+        # self.encoder.reset_parameters()
+        # self.pool.reset_parameters()
 
     def forward(self, x_dict, edge_index_dict, edge_feature_dict, onset_index, onset_idx, lengths, **kwargs):
         x = x_dict["note"]
@@ -1079,11 +1082,11 @@ class MetricalChordPrediction(LightningModule):
         self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rest": 3, "consecutive_rev": 4, "during_rev": 5,
                        "rest_rev": 6}
         self.use_signed_features = kwargs.get("use_signed_features", False)
+        pitch_embedding = kwargs.get("pitch_embedding", 0)
         self.module = MetricalChordPredictionModel(
             in_feats, n_hidden, tasks, n_layers, activation, dropout,
             use_nade=use_nade, use_jk=use_jk, use_reledge=use_reledge, metrical=use_metrical, **kwargs).float().to(self.device)
-        pitch_embedding = kwargs.get("pitch_embedding", None)
-        self.pitch_embedding = torch.nn.Embedding(12, 16) if pitch_embedding is not None else pitch_embedding
+        self.pitch_embedding = torch.nn.Embedding(12, 16) if pitch_embedding != 0 else pitch_embedding
         self.lr = lr
         self.weight_decay = weight_decay
         self.test_roman = list()
@@ -1153,7 +1156,7 @@ class MetricalChordPrediction(LightningModule):
         edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
                              METADATA[1]} if edge_features is not None else None
         batch_pred = self.module(x_dict, edge_index_dict, edge_feature_dict, onset_edges, onset_idx,
-                                 lengths=batch["lengths"])
+                                 lengths=None)
         batch_labels = batch["y"]
         loss = self.val_loss(batch_pred, batch_labels)
         self.log('val_loss', loss["total"].item(), on_step=False, on_epoch=True, prog_bar=True, batch_size=1)
@@ -1187,7 +1190,7 @@ class MetricalChordPrediction(LightningModule):
         edge_feature_dict = {et: edge_features[edge_types == self.etypes[et[1]]] for et in
                              METADATA[1]} if edge_features is not None else None
         batch_pred = self.module(x_dict, edge_index_dict, edge_feature_dict, onset_edges, onset_idx,
-                                 lengths=batch["lengths"])
+                                 lengths=None)
         batch_labels = batch["y"]
         acc = self.test_acc(batch_pred, batch_labels)
         for task in self.tasks.keys():

@@ -342,12 +342,12 @@ class AugmentedGraphDatamodule(LightningDataModule):
                    self.datasets_map[i][1]].collection == "test"
         ]
 
-        # val_idx = [
-        #     i
-        #     for i in idxs
-        #     if self.datasets[self.datasets_map[i][0]].graphs[
-        #            self.datasets_map[i][1]].collection == "validation"
-        # ]
+        val_idx = [
+            i
+            for i in idxs
+            if self.datasets[self.datasets_map[i][0]].graphs[
+                   self.datasets_map[i][1]].collection == "validation"
+        ]
 
         train_idx = [
             i
@@ -359,20 +359,15 @@ class AugmentedGraphDatamodule(LightningDataModule):
         # structure the indices as dicts {dataset_i : [piece_i,...,piece_i]}
         self.test_idx_dict = idx_tuple_to_dict(test_idx, self.datasets_map)
         self.train_idx_dict = idx_tuple_to_dict(train_idx, self.datasets_map)
-        # self.val_idx_dict = idx_tuple_to_dict(val_idx, self.datasets_map)
+        self.val_idx_dict = idx_tuple_to_dict(val_idx, self.datasets_map)
         # create the datasets
         print(
-            f"Train size :{len(train_idx)}, Val size :{len(test_idx)}, Test size :{len(test_idx)}"
+            f"Train size :{len(train_idx)}, Val size :{len(val_idx)}, Test size :{len(test_idx)}"
         )
 
     def collate_fn(self, batch):
         e = batch[0]
         out = {}
-        if self.include_measures:
-            out["beat_nodes"] = e["beat_nodes"].long().squeeze()
-            out["beat_edges"] = e["beat_edges"].long().squeeze()
-            out["measure_nodes"] = e["measure_nodes"].long().squeeze()
-            out["measure_edges"] = e["measure_edges"].long().squeeze()
         # batch_inputs = F.normalize(batch_inputs.squeeze(0)) if self.normalize_features else batch_inputs.squeeze(0)
         out["x"] = e["x"].squeeze(0).float()
         batch_labels = e["y"].squeeze(0)
@@ -388,6 +383,7 @@ class AugmentedGraphDatamodule(LightningDataModule):
         edge_type = e["edge_type"].squeeze(0)
         # Add reverse edges
         out["edge_index"], out["edge_type"] = add_reverse_edges_from_edge_index(edges, edge_type)
+        out["lengths"] = e["y"].shape[0]
         # edges = torch.cat([edges, edges.flip(0)], dim=1)
         # edge_type = torch.cat([edge_type, edge_type], dim=0)
         return out
@@ -402,17 +398,8 @@ class AugmentedGraphDatamodule(LightningDataModule):
         onset_divs = list()
         max_idx = []
         max_onset_div = []
-        beats = []
-        beat_eindex = []
-        measures = []
-        measure_eindex = []
         note_array = []
         for e in examples:
-            if self.include_measures:
-                beats.append(e["beat_nodes"].long())
-                beat_eindex.append(e["beat_edges"].long())
-                measures.append(e["measure_nodes"].long())
-                measure_eindex.append(e["measure_edges"].long())
             lengths.append(e["y"].shape[0])
             x.append(e["x"])
             edge_index.append(e["edge_index"])
@@ -445,17 +432,7 @@ class AugmentedGraphDatamodule(LightningDataModule):
         out["y"]["onset"] = y[:, :, -1]
         out["onset_div"] = torch.cat([onset_divs[pi]+max_onset_div[i] for i, pi in enumerate(perm_idx)], dim=0).long()
         out["note_array"] = torch.cat([note_array[i] for i in perm_idx], dim=0).float()
-        if self.include_measures:
-            max_beat_idx = np.cumsum(np.array([0] + [beats[i].shape[0] for i in perm_idx]))
-            out["beat_nodes"] = torch.cat([beats[pi] + max_beat_idx[i] for i, pi in enumerate(perm_idx)], dim=0).long()
-            out["beat_edges"] = torch.cat(
-                [torch.vstack((beat_eindex[pi][0] + max_idx[i], beat_eindex[pi][1] + max_beat_idx[i])) for i, pi in
-                 enumerate(perm_idx)], dim=1).long()
-            max_measure_idx = np.cumsum(np.array([0] + [measures[i].shape[0] for i in perm_idx]))
-            out["measure_nodes"] = torch.cat([measures[pi] + max_measure_idx[i] for i, pi in enumerate(perm_idx)], dim=0).long()
-            out["measure_edges"] = torch.cat(
-                [torch.vstack((measure_eindex[pi][0] + max_idx[i], measure_eindex[pi][1] + max_measure_idx[i])) for
-                 i, pi in enumerate(perm_idx)], dim=1).long()
+
         return out
 
     def train_dataloader(self):
@@ -474,9 +451,9 @@ class AugmentedGraphDatamodule(LightningDataModule):
         )
 
     def val_dataloader(self):
-        self.dataset_test = ConcatDataset([self.datasets[k][self.test_idx_dict[k]] for k in self.test_idx_dict.keys()])
+        self.dataset_val = ConcatDataset([self.datasets[k][self.val_idx_dict[k]] for k in self.val_idx_dict.keys()])
         return torch.utils.data.DataLoader(
-            self.dataset_test, batch_size=1, num_workers=self.num_workers, collate_fn=self.collate_fn,
+            self.dataset_val, batch_size=1, num_workers=self.num_workers, collate_fn=self.collate_fn,
             drop_last=False, pin_memory=False,
         )
 

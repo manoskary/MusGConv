@@ -121,8 +121,8 @@ class ComposerClassificationModelLightning(LightningModule):
         self.log("test_loss", loss.item(), batch_size=batch_size)
         self.log("test_acc", acc.item(), batch_size=batch_size)
         self.log("test_f1", fscore.item(), batch_size=batch_size)
-        self.log("y_true", y)
-        self.log("y_pred", y_hat)
+        # self.log("y_true", y)
+        # self.log("y_pred", y_hat)
         return loss
 
     def common_step(self, batch, batch_idx):

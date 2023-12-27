@@ -150,11 +150,11 @@ class OnsetEdgePoolingVersion2(nn.Module):
         super(OnsetEdgePoolingVersion2, self).__init__()
         self.in_channels = in_channels
         self.trans = nn.Sequential(
-            nn.Linear(in_channels, in_channels),
-            nn.BatchNorm1d(in_channels),
+            nn.Linear(in_channels, 2*in_channels),
             nn.ReLU(),
+            nn.BatchNorm1d(2*in_channels),
             nn.Dropout(dropout),
-            nn.Linear(in_channels, in_channels),
+            nn.Linear(2*in_channels, in_channels),
         )
 
     def forward(self, x, edge_index, idx=None):
@@ -1091,8 +1091,10 @@ class MetricalChordPrediction(LightningModule):
         self.weight_decay = weight_decay
         self.test_roman = list()
         self.test_roman_ts = list()
+        label_smoothing = kwargs.get("label_smoothing", 0)
+        self.use_wandb = kwargs.get("use_wandb", False)
         self.train_loss = MultiTaskLoss(
-            list(tasks.keys()), nn.ModuleDict({task: nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=0.1) for task in tasks.keys()}), requires_grad=weight_loss)
+            list(tasks.keys()), nn.ModuleDict({task: nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=label_smoothing) for task in tasks.keys()}), requires_grad=weight_loss)
         self.val_loss = MultiTaskLoss(
             list(tasks.keys()), nn.ModuleDict({task: nn.CrossEntropyLoss() for task in tasks.keys()}), requires_grad=False)
         self.test_acc = MultitaskAccuracy(tasks)

@@ -33,21 +33,21 @@ class SMOTE(object):
 
         return nearest_idx[:, 1:k+1]
 
-    def find_k(self, X, k):
+    def find_k(self, X, k, device='cpu'):
         z = F.normalize(X, p=2, dim=1)
         distance = torch.mm(z, z.t())
-        return self.k_neighbors(distance, k)
+        return self.k_neighbors(distance, k, device=device)
 
     # TODO: Need to find a matrix version of Euclid Distance and Cosine Distance.
-    def find_k_euc(self, X, k):
-        euclid_distance = torch.zeros((X.shape[0], X.shape[0]), dtype=torch.float32)
+    def find_k_euc(self, X, k, device='cpu'):
+        euclid_distance = torch.zeros((X.shape[0], X.shape[0]), dtype=torch.float32, device=device)
 
         for i in range(len(X)):
             dif = (X - X[i]) ** 2
             dist = torch.sqrt(dif.sum(axis=1))
             euclid_distance[i] = dist
 
-        return self.k_neighbors(euclid_distance, k)
+        return self.k_neighbors(euclid_distance, k, device=device)
 
     def find_k_cos(self, X, k, device='cpu'):
         cosine_distance = F.cosine_similarity(X, X)
@@ -72,11 +72,11 @@ class SMOTE(object):
         self.synthetic_arr = torch.zeros(int(N / 100) * T, self.dims, dtype=torch.float32, device=device)
         N = int(N / 100)
         if self.distance_measure == 'euclidian':
-            indices = self.find_k_euc(min_samples, k)
+            indices = self.find_k_euc(min_samples, k, device=device)
         elif self.distance_measure == 'cosine':
             indices = self.find_k_cos(min_samples, k, device=device)
         else:
-            indices = self.find_k(min_samples, k)
+            indices = self.find_k(min_samples, k, device=device)
         for i in range(indices.shape[0]):
             self.populate(N, i, indices[i], min_samples, k, device=device)
         self.newindex = 0
@@ -138,8 +138,8 @@ class SageEncoder(nn.Module):
     def forward(self, x, edge_index, edge_feature, **kwargs):
         for conv in self.layers[:-1]:
             x = conv(x, edge_index)
-            x = F.normalize(x, dim=-1)
             x = self.activation(x)
+            x = F.normalize(x, dim=-1)
             x = self.dropout(x)
         x = self.layers[-1](x, edge_index)
         return x
@@ -163,8 +163,8 @@ class ResGatedConvEncoder(nn.Module):
     def forward(self, x, edge_index, edge_feature, **kwargs):
         for conv in self.layers[:-1]:
             x = conv(x, edge_index)
-            x = F.normalize(x, dim=-1)
             x = self.activation(x)
+            x = F.normalize(x, dim=-1)
             x = self.dropout(x)
         x = self.layers[-1](x, edge_index)
         return x
@@ -188,8 +188,8 @@ class GATEncoder(nn.Module):
     def forward(self, x, edge_index, edge_feature, **kwargs):
         for conv in self.layers[:-1]:
             x = conv(x, edge_index)
-            x = F.normalize(x, dim=-1)
             x = self.activation(x)
+            x = F.normalize(x, dim=-1)
             x = self.dropout(x)
         x = self.layers[-1](x, edge_index)
         return x
@@ -223,8 +223,8 @@ class HeteroMusGConvEncoder(nn.Module):
             else:
                 x_dict = conv(x_dict, edge_index_dict, edge_feature_dict)
                 edge_feature_dict = {k: None for k in edge_index_dict.keys()}
-            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
             x_dict = {k: self.activation(v) for k, v in x_dict.items()}
+            x_dict = {k: F.normalize(v, dim=-1) for k, v in x_dict.items()}
             x_dict = {k: F.dropout(v, p=self.dropout, training=self.training) for k, v in x_dict.items()}
         x_dict = self.layers[-1](x_dict, edge_index_dict, edge_feature_dict)
         return x_dict

@@ -23,7 +23,7 @@ def get_cad_features(part):
     """
     if isinstance(part, pt.performance.PerformedPart):
         perf_array = part.note_array()
-        x = perf_array[["onset_sec", "duration_sec"]].astype([("onset_beat", "f4"), ("duration_beat", "f4")])
+        x = perf_array[["onset_sec", "duration_sec"]].astype([("onset_div", "f4"), ("duration_div", "f4")])
         note_array = np.lib.recfunctions.merge_arrays((perf_array, x))
     elif isinstance(part, np.ndarray):
         note_array = part
@@ -37,22 +37,22 @@ def get_cad_features(part):
                                               note_array["voice" == note_array["voice"].max()]["pitch"].mean() else note_array["voice"].max()
     for i, n in enumerate(note_array):
         d = {}
-        n_onset = note_array[note_array["onset_beat"] == n["onset_beat"]]
-        n_dur = note_array[np.where((note_array["onset_beat"] < n["onset_beat"]) & (note_array["onset_beat"] + note_array["duration_beat"] > n["onset_beat"]))]
+        n_onset = note_array[note_array["onset_div"] == n["onset_div"]]
+        n_dur = note_array[np.where((note_array["onset_div"] < n["onset_div"]) & (note_array["onset_div"] + note_array["duration_div"] > n["onset_div"]))]
         chord_pitch = np.hstack((n_onset["pitch"], n_dur["pitch"]))
         int_vec, pc_class = chord_to_intervalVector(chord_pitch.tolist(), return_pc_class=True)
         pc_class_recentered = sorted(list(map(lambda x: x - min(pc_class), pc_class)))
         maj_int_vecs = [[0, 0, 1, 1, 1, 0], [0, 0, 1, 0, 0, 0], [0, 0, 0, 1, 0, 0], [0, 0, 0, 0, 1, 0]]
-        prev_4beats = note_array[np.where((note_array["onset_beat"] < n["onset_beat"]) & (note_array["onset_beat"] > n["onset_beat"] - 4))][
+        prev_4beats = note_array[np.where((note_array["onset_div"] < n["onset_div"]) & (note_array["onset_div"] > n["onset_div"] - 4))][
                           "pitch"] % 12
-        prev_8beats = note_array[np.where((note_array["onset_beat"] < n["onset_beat"]) & (note_array["onset_beat"] > n["onset_beat"] - 8))][
+        prev_8beats = note_array[np.where((note_array["onset_div"] < n["onset_div"]) & (note_array["onset_div"] > n["onset_div"] - 8))][
                           "pitch"] % 12
         maj_pcs = [[0, 4, 7], [0, 5, 9], [0, 3, 8], [0, 4], [0, 8], [0, 7], [0, 5]]
         scale = [2, 3, 5, 7, 8, 11] if (n["pitch"] + 3) in chord_pitch % 12 else [2, 4, 5, 7, 9, 11]
         v7 = [[0, 1, 2, 1, 1, 1], [0, 1, 0, 1, 0, 1], [0, 1, 0, 0, 0, 0]]
-        next_voice_notes = note_array[np.where((note_array["voice"] == n["voice"]) & (note_array["onset_beat"] > n["onset_beat"]))]
-        prev_voice_notes = note_array[np.where((note_array["voice"] == n["voice"]) & (note_array["onset_beat"] < n["onset_beat"]))]
-        prev_voice_pitch = prev_voice_notes[prev_voice_notes["onset_beat"] == prev_voice_notes["onset_beat"].max()]["pitch"] if prev_voice_notes.size else 0
+        next_voice_notes = note_array[np.where((note_array["voice"] == n["voice"]) & (note_array["onset_div"] > n["onset_div"]))]
+        prev_voice_notes = note_array[np.where((note_array["voice"] == n["voice"]) & (note_array["onset_div"] < n["onset_div"]))]
+        prev_voice_pitch = prev_voice_notes[prev_voice_notes["onset_div"] == prev_voice_notes["onset_div"].max()]["pitch"] if prev_voice_notes.size else 0
         # start Z features
         d["perfect_triad"] = int_vec in maj_int_vecs
         d["perfect_major_triad"] = d["perfect_triad"] and pc_class_recentered in maj_pcs
@@ -75,13 +75,13 @@ def get_cad_features(part):
                 n["pitch"] - chord_pitch.min()) % 12 == 7 if prev_voice_notes.size else False
 
         # Make R features
-        d["strong_beat"] = (n["ts_beats"] == 4 and n["onset_beat"] % 2 == 0) or (n["onset_beat"] % n['ts_beats'] == 0) # to debug
+        d["strong_beat"] = (n["ts_beats"] == 4 and n["onset_div"] % 2 == 0) or (n["onset_div"] % n['ts_beats'] == 0) # to debug
         d["sustained_note"] = n_dur.size > 0
         if next_voice_notes.size:
-            d["rest_highest"] = n["voice"] == high_voice and next_voice_notes["onset_beat"].min() > n["onset_beat"] + n["duration_beat"]
-            d["rest_lowest"] = n["voice"] == bass_voice and next_voice_notes["onset_beat"].min() > n["onset_beat"] + n["duration_beat"]
-            d["rest_middle"] = n["voice"] != high_voice and n["voice"] != bass_voice and next_voice_notes["onset_beat"].min() > n[
-                "onset_beat"] + n["duration_beat"]
+            d["rest_highest"] = n["voice"] == high_voice and next_voice_notes["onset_div"].min() > n["onset_div"] + n["duration_div"]
+            d["rest_lowest"] = n["voice"] == bass_voice and next_voice_notes["onset_div"].min() > n["onset_div"] + n["duration_div"]
+            d["rest_middle"] = n["voice"] != high_voice and n["voice"] != bass_voice and next_voice_notes["onset_div"].min() > n[
+                "onset_div"] + n["duration_div"]
             d["voice_ends"] = False
         else:
             d["rest_highest"] = False
@@ -96,7 +96,7 @@ def get_cad_features(part):
         d["has_9"] = 1 in pc_class_recentered or 2 in pc_class_recentered
         d["bass_voice"] = n["voice"] == bass_voice
         if prev_voice_notes.size:
-            x = prev_voice_notes[prev_voice_notes["onset_beat"] == prev_voice_notes["onset_beat"].max()]["pitch"]
+            x = prev_voice_notes[prev_voice_notes["onset_div"] == prev_voice_notes["onset_div"].max()]["pitch"]
             d["bass_moves_chromatic"] = n["voice"] == bass_voice and (1 in x - n["pitch"] or -1 in x-n["pitch"])
             d["bass_moves_octave"] = n["voice"] == bass_voice and (12 in x - n["pitch"] or -12 in x - n["pitch"])
             d["bass_compatible_v-i"] = n["voice"] == bass_voice and (7 in x - n["pitch"] or -5 in x - n["pitch"])

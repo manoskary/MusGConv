@@ -21,7 +21,7 @@ class BachWTCDataset(BuiltinDataset):
 
     def process(self):
         self.scores = []
-        base_score_path = os.path.join(self.save_path, "kern")
+        base_score_path = os.path.join(self.save_path, "musicxml")
         for fn in os.listdir(base_score_path):
             self.scores.append(os.path.join(base_score_path, fn))
 

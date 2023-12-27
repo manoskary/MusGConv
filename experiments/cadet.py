@@ -18,6 +18,7 @@ parser.add_argument('--dropout', type=float, default=0.5)
 parser.add_argument('--lr', type=float, default=0.007)
 parser.add_argument('--weight_decay', type=float, default=0.007)
 parser.add_argument("--num_workers", type=int, default=20)
+parser.add_argument("--n_epochs", type=int, default=50, help="Number of epochs to train for.")
 parser.add_argument("--verbose", action="store_true", help="Verbose for dataset loading")
 parser.add_argument("--load_from_checkpoint", action="store_true", help="Load model from WANDB checkpoint")
 parser.add_argument("--force_reload", action="store_true", help="Force reload of the data")
@@ -40,7 +41,7 @@ parser.add_argument("--use_signed_features", action="store_true", help="Use sing
 # for reproducibility
 torch.manual_seed(0)
 random.seed(0)
-torch.use_deterministic_algorithms(True)
+# torch.use_deterministic_algorithms(True)
 # seed_everything(seed=0, workers=True)
 
 
@@ -58,7 +59,7 @@ force_reload = False
 num_workers = args.num_workers
 
 
-name = "{}_{}-{}x{}-lr={}-wd={}-dr={}-rl={}-jk={}".format(("Het" if args.heterogeneous else "Hom"), args.model,
+name = "{}-{}x{}-lr={}-wd={}-dr={}-rl={}-jk={}".format(args.model,
     n_layers, n_hidden, args.lr,
     args.weight_decay, args.dropout, args.reg_loss_weight, args.use_jk)
 
@@ -74,7 +75,7 @@ model = CadenceClassificationModelLightning(
     lr=args.lr, weight_decay=args.weight_decay, metrical=args.use_metrical, use_jk=args.use_jk,
     stack_convs=args.stack_convs, pitch_embedding=args.pitch_embedding, reg_loss_weight=args.reg_loss_weight,
     hetero=args.heterogeneous, conv_block=args.model, use_signed_features=args.use_signed_features,
-    return_edge_emb=args.return_edge_emb,
+    return_edge_emb=args.return_edge_emb, use_wandb=args.use_wandb
 )
 
 if args.use_wandb:
@@ -90,11 +91,11 @@ if args.use_wandb:
 
 checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="val_f1", mode="max")
 trainer = Trainer(
-    max_epochs=50, accelerator="auto", devices=devices,
+    max_epochs=args.n_epochs, accelerator="auto", devices=devices,
     num_sanity_val_steps=1,
     logger=wandb_logger if args.use_wandb else None,
     # plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
-    replace_sampler_ddp=False,
+    # replace_sampler_ddp=False,
     reload_dataloaders_every_n_epochs=5,
     callbacks=[checkpoint_callback],
     )

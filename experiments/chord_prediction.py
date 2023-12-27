@@ -27,6 +27,7 @@ parser.add_argument('--use_jk', action="store_true", help="Use Jumping Knowledge
 parser.add_argument('--mtl_norm', default="none", choices=["none", "Rotograd", "NADE", "GradNorm", "Neutral"], help="Which MLT optimization to use.")
 parser.add_argument("--include_synth", action="store_true", help="Include synthetic data.")
 parser.add_argument("--force_reload", action="store_true", help="Force reload of the data")
+parser.add_argument("--label_smoothing", type=float, default=0.0, help="Label smoothing value for loss during training.")
 parser.add_argument("--use_ckpt", type=str, default=None, help="Use checkpoint for prediction.")
 parser.add_argument("--num_tasks", type=int, default=11, choices=[5, 11, 14], help="Number of tasks to train on.")
 parser.add_argument("--data_version", type=str, default="v1.0.0", choices=["v1.0.0", "latest"], help="Version of the dataset to use.")
@@ -95,7 +96,7 @@ model = st.models.chord.MetricalChordPrediction(
     weight_decay=args.weight_decay, use_nade=use_nade, use_jk=args.use_jk, weight_loss=weight_loss,
     use_reledge=args.use_reledge, use_metrical=args.use_metrical, pitch_embedding=args.pitch_embedding,
     conv_block=args.model, stack_convs=args.stack_convs, use_signed_features=args.use_signed_features,
-    return_edge_emb=args.return_edge_emb
+    return_edge_emb=args.return_edge_emb, label_smoothing=0.1, use_wandb=args.use_wandb,
     )
 checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="global_step", mode="max")
 early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=0.02, patience=5, verbose=False, mode="min")

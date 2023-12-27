@@ -338,6 +338,8 @@ class MozartPianoSonatasCadenceGraphDataset(musgconvDataset):
                 include_staff=True,
                 include_pitch_spelling=True,
             )
+            # assert that the note array contains voice information and has no NaNs
+            assert np.all(note_array["voice"] >= 0), "Voice information is missing for score {}.".format(score_fn)
             note_features = select_features(note_array, "cadence")
             nodes, edges = hetero_graph_from_note_array(note_array)
             labels = self.get_labels(annotation, note_array, score_key)
@@ -373,7 +375,7 @@ class MozartPianoSonatasCadenceGraphDataset(musgconvDataset):
             if key not in self.metadata():
                 continue
             scores[key] = score_fn
-            fn = "{}.tsv".format(key)
+            fn = "{}.harmonies.tsv".format(key)
             annotation_dir = os.path.join(url_base, fn)
             annotation = pd.read_csv(annotation_dir, sep="\t")
             annotations[key] = dict()

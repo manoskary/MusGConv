@@ -170,6 +170,8 @@ class BachWTCCadenceGraphDataset(musgconvDataset):
                 include_staff=True,
                 include_pitch_spelling=True,
             )
+            # assert that the note array contains voice information and has no NaNs
+            assert np.all(note_array["voice"] >= 0), "Voice information is missing for score {}.".format(score_fn)
             note_features = select_features(note_array, "cadence")
             nodes, edges = hetero_graph_from_note_array(note_array)
             labels = self.get_labels(annotation, new_score, note_array, score_key)

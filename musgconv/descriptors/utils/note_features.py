@@ -50,9 +50,9 @@ def get_general_features(part, note_array):
     """
     ca = np.zeros((len(note_array), len(NOTE_FEATURES)))
     for i, n in enumerate(note_array):
-        n_onset = note_array[note_array["onset_beat"] == n["onset_beat"]]
-        n_dur = note_array[np.where((note_array["onset_beat"] < n["onset_beat"]) & (note_array["onset_beat"] + note_array["duration_beat"] > n["onset_beat"]))]
-        n_cons = note_array[note_array["onset_beat"] + note_array["duration_beat"] == n["onset_beat"]]
+        n_onset = note_array[note_array["onset_div"] == n["onset_div"]]
+        n_dur = note_array[np.where((note_array["onset_div"] < n["onset_div"]) & (note_array["onset_div"] + note_array["duration_div"] > n["onset_div"]))]
+        n_cons = note_array[note_array["onset_div"] + note_array["duration_div"] == n["onset_div"]]
         chord_pitch = np.hstack((n_onset["pitch"], n_dur["pitch"]))
         int_vec, pc_class = chord_to_intervalVector(chord_pitch.tolist(), return_pc_class=True)
         chords_features = {k: (1 if int_vec == v else 0) for k,v in CHORDS.items()}
@@ -60,7 +60,7 @@ def get_general_features(part, note_array):
         is_maj_triad = 1 if chords_features["M/m"] and pc_class_recentered in [[0, 4, 7], [0, 5, 9], [0, 3, 8]] else 0
         is_min_triad = 1 if chords_features["M/m"] and pc_class_recentered in [[0, 3, 7], [0, 5, 8], [0, 4, 9]] else 0
         is_pmaj_triad = 1 if is_maj_triad and 4 in (chord_pitch - chord_pitch.min())%12 and 7 in (chord_pitch - chord_pitch.min())%12 else 0
-        ped_note = 1 if n["duration_beat"] > n["ts_beats"] else 0
+        ped_note = 1 if n["duration_div"] > n["ts_beats"] else 0
         hv_7 = 1 if (chord_pitch.max() - chord_pitch.min())%12 == 10 else 0
         hv_5 = 1 if (chord_pitch.max() - chord_pitch.min()) % 12 == 7 else 0
         hv_3 = 1 if (chord_pitch.max() - chord_pitch.min())%12 in [3, 4] else 0
@@ -131,17 +131,17 @@ def get_input_irrelevant_features(part) -> Tuple[np.ndarray, List]:
     """
     if isinstance(part, pt.performance.PerformedPart):
         perf_array = part.note_array()
-        x = perf_array[["onset_sec", "duration_sec"]].astype([("onset_beat", "f4"), ("duration_beat", "f4")])
+        x = perf_array[["onset_sec", "duration_sec"]].astype([("onset_div", "f4"), ("duration_div", "f4")])
         note_array = np.lib.recfunctions.merge_arrays((perf_array, x))
     else:
         note_array = part.note_array()
 
     ca = np.zeros((len(note_array), len(NOTE_FEATURES)))
     for i, n in enumerate(note_array):
-        n_onset = note_array[note_array["onset_beat"] == n["onset_beat"]]
-        n_dur = note_array[np.where((note_array["onset_beat"] < n["onset_beat"]) & (
-                    note_array["onset_beat"] + note_array["duration_beat"] > n["onset_beat"]))]
-        n_cons = note_array[note_array["onset_beat"] + note_array["duration_beat"] == n["onset_beat"]]
+        n_onset = note_array[note_array["onset_div"] == n["onset_div"]]
+        n_dur = note_array[np.where((note_array["onset_div"] < n["onset_div"]) & (
+                    note_array["onset_div"] + note_array["duration_div"] > n["onset_div"]))]
+        n_cons = note_array[note_array["onset_div"] + note_array["duration_div"] == n["onset_div"]]
         chord_pitch = np.hstack((n_onset["pitch"], n_dur["pitch"]))
         int_vec, pc_class = chord_to_intervalVector(chord_pitch.tolist(), return_pc_class=True)
         chords_features = {k: (1 if int_vec == v else 0) for k, v in CHORDS.items()}
@@ -150,7 +150,7 @@ def get_input_irrelevant_features(part) -> Tuple[np.ndarray, List]:
         is_min_triad = 1 if chords_features["M/m"] and pc_class_recentered in [[0, 3, 7], [0, 5, 8], [0, 4, 9]] else 0
         is_pmaj_triad = 1 if is_maj_triad and 4 in (chord_pitch - chord_pitch.min()) % 12 and 7 in (
                     chord_pitch - chord_pitch.min()) % 12 else 0
-        ped_note = 1 if n["duration_beat"] > 4 else 0
+        ped_note = 1 if n["duration_div"] > 4 else 0
         hv_7 = 1 if (chord_pitch.max() - chord_pitch.min()) % 12 == 10 else 0
         hv_5 = 1 if (chord_pitch.max() - chord_pitch.min()) % 12 == 7 else 0
         hv_3 = 1 if (chord_pitch.max() - chord_pitch.min()) % 12 in [3, 4] else 0
@@ -189,7 +189,7 @@ def get_voice_separation_features(part) -> Tuple[np.ndarray, List]:
     """
     if isinstance(part, pt.performance.PerformedPart):
         perf_array = part.note_array()
-        x = perf_array[["onset_sec", "duration_sec"]].astype([("onset_beat", "f4"), ("duration_beat", "f4")])
+        x = perf_array[["onset_sec", "duration_sec"]].astype([("onset_div", "f4"), ("duration_div", "f4")])
         note_array = np.lib.recfunctions.merge_arrays((perf_array, x))
     elif isinstance(part, np.ndarray):
         note_array = part
@@ -199,11 +199,11 @@ def get_voice_separation_features(part) -> Tuple[np.ndarray, List]:
 
     # octave_oh, octave_names = get_octave_one_hot(part, note_array)
     # pc_oh, pc_names = get_pc_one_hot(part, note_array)
-    # onset_feature = np.expand_dims(np.remainder(note_array["onset_beat"], note_array["ts_beats"]) / note_array["ts_beats"], 1)
+    # onset_feature = np.expand_dims(np.remainder(note_array["onset_div"], note_array["ts_beats"]) / note_array["ts_beats"], 1)
     # on_feats, _ = pt.musicanalysis.note_features.onset_feature(note_array, part)
-    # duration_feature = np.expand_dims(np.remainder(note_array["duration_beat"], note_array["ts_beats"]) / note_array["ts_beats"], 1)
+    # duration_feature = np.expand_dims(np.remainder(note_array["duration_div"], note_array["ts_beats"]) / note_array["ts_beats"], 1)
     # # new attempt! To delete in case
-    # # duration_feature = np.expand_dims(1- (1/(1+np.exp(-3*(note_array["duration_beat"]/note_array["ts_beats"])))-0.5)*2, 1)
+    # # duration_feature = np.expand_dims(1- (1/(1+np.exp(-3*(note_array["duration_div"]/note_array["ts_beats"])))-0.5)*2, 1)
     # pitch_norm = np.expand_dims(note_array["pitch"] / 127., 1)
     # on_names = ["barnorm_onset", "piecenorm_onset"]
     # dur_names = ["barnorm_duration"]
@@ -213,12 +213,12 @@ def get_voice_separation_features(part) -> Tuple[np.ndarray, List]:
 
     # octave_oh, octave_names = get_octave_one_hot(part, note_array)
     # pitch_oh, pitch_names = get_full_pitch_one_hot(part, note_array)
-    # onset_feature = np.expand_dims(np.remainder(note_array["onset_beat"], note_array["ts_beats"]) / note_array["ts_beats"], 1)
+    # onset_feature = np.expand_dims(np.remainder(note_array["onset_div"], note_array["ts_beats"]) / note_array["ts_beats"], 1)
     # on_feats, _ = pt.musicanalysis.note_features.onset_feature(note_array, part)
     octave_oh, octave_names = get_octave_one_hot(part, note_array)
     pc_oh, pc_names = get_pc_one_hot(part, note_array)
-    # duration_feature = np.expand_dims(1- (1/(1+np.exp(-3*(note_array["duration_beat"]/note_array["ts_beats"])))-0.5)*2, 1)
-    duration_feature = np.expand_dims(1 - np.tanh(note_array["duration_beat"]/note_array["ts_beats"]), 1)
+    # duration_feature = np.expand_dims(1- (1/(1+np.exp(-3*(note_array["duration_div"]/note_array["ts_beats"])))-0.5)*2, 1)
+    duration_feature = np.expand_dims(1 - np.tanh(note_array["duration_div"]/note_array["ts_beats"]), 1)
     dur_names = ["bar_exp_duration"]
     # on_names = ["barnorm_onset", "piecenorm_onset"]
     names = dur_names + pc_names + octave_names 
@@ -237,7 +237,7 @@ def get_chord_analysis_features(part, one_hot=False) -> Tuple[np.ndarray, List]:
     """
     if isinstance(part, pt.performance.PerformedPart):
         perf_array = part.note_array()
-        x = perf_array[["onset_sec", "duration_sec"]].astype([("onset_beat", "f4"), ("duration_beat", "f4")])
+        x = perf_array[["onset_sec", "duration_sec"]].astype([("onset_div", "f4"), ("duration_div", "f4")])
         note_array = np.lib.recfunctions.merge_arrays((perf_array, x))
     elif isinstance(part, np.ndarray):
         note_array = part
@@ -256,7 +256,7 @@ def get_chord_analysis_features(part, one_hot=False) -> Tuple[np.ndarray, List]:
         pname = spelling_features[:, :7].argmax(axis=1)
         alter = spelling_features[:, 7:].argmax(axis=1)
         pitch_names = ["pitch"]
-    duration_feature = np.expand_dims(1 - np.tanh(note_array["duration_beat"] / note_array["ts_beats"]), 1)
+    duration_feature = np.expand_dims(1 - np.tanh(note_array["duration_div"] / note_array["ts_beats"]), 1)
     dur_names = ["bar_exp_duration"]
 
     # find min pitch per unique onset and set to one
@@ -264,23 +264,23 @@ def get_chord_analysis_features(part, one_hot=False) -> Tuple[np.ndarray, List]:
     min_max_pitch_names = ["min_pitch", "max_pitch"]
     metrical_features = np.zeros((len(note_array), 4))
     # is first note of bar
-    metrical_features[:, 0] = np.remainder(note_array["onset_beat"], note_array["ts_beats"]) == 0
+    metrical_features[:, 0] = np.remainder(note_array["onset_div"], note_array["ts_beats"]) == 0
     # is integer beat
-    metrical_features[:, 1] = np.remainder(note_array["onset_beat"], 1) == 0
+    metrical_features[:, 1] = np.remainder(note_array["onset_div"], 1) == 0
     # is half the ts_beats if ts_beats is even
-    metrical_features[:, 2] = np.remainder(note_array["onset_beat"], note_array["ts_beats"] / 2) == 0
+    metrical_features[:, 2] = np.remainder(note_array["onset_div"], note_array["ts_beats"] / 2) == 0
     metrical_names = ["is_first_note_of_bar", "is_downbeat", "is_half_ts_beat", "time_until_next_onset"]
     # time until next onset
-    unique_onsets = np.unique(note_array["onset_beat"])
+    unique_onsets = np.unique(note_array["onset_div"])
     time_until_next_onset = np.r_[np.diff(unique_onsets), 0.0]
-    time_until_next_onset = time_until_next_onset[np.searchsorted(unique_onsets, note_array["onset_beat"])]
+    time_until_next_onset = time_until_next_onset[np.searchsorted(unique_onsets, note_array["onset_div"])]
     metrical_features[:, 3] = 1 - np.tanh(time_until_next_onset/note_array["ts_beats"])
     ca = np.zeros((len(note_array), len(NOTE_FEATURES)))
     for i, n in enumerate(note_array):
-        n_onset = note_array[note_array["onset_beat"] == n["onset_beat"]]
-        n_dur = note_array[np.where((note_array["onset_beat"] < n["onset_beat"]) & (
-                    note_array["onset_beat"] + note_array["duration_beat"] > n["onset_beat"]))]
-        n_cons = note_array[note_array["onset_beat"] + note_array["duration_beat"] == n["onset_beat"]]
+        n_onset = note_array[note_array["onset_div"] == n["onset_div"]]
+        n_dur = note_array[np.where((note_array["onset_div"] < n["onset_div"]) & (
+                    note_array["onset_div"] + note_array["duration_div"] > n["onset_div"]))]
+        n_cons = note_array[note_array["onset_div"] + note_array["duration_div"] == n["onset_div"]]
         chord_pitch = np.hstack((n_onset["pitch"], n_dur["pitch"]))
         min_max_pitch[i, 0] = np.min(chord_pitch) == n["pitch"]
         min_max_pitch[i, 1] = np.max(chord_pitch) == n["pitch"]
@@ -291,7 +291,7 @@ def get_chord_analysis_features(part, one_hot=False) -> Tuple[np.ndarray, List]:
         is_min_triad = 1 if chords_features["M/m"] and pc_class_recentered in [[0, 3, 7], [0, 5, 8], [0, 4, 9]] else 0
         is_pmaj_triad = 1 if is_maj_triad and 4 in (chord_pitch - chord_pitch.min()) % 12 and 7 in (
                     chord_pitch - chord_pitch.min()) % 12 else 0
-        ped_note = 1 if n["duration_beat"] > n["ts_beats"] else 0
+        ped_note = 1 if n["duration_div"] > n["ts_beats"] else 0
         hv_7 = 1 if (chord_pitch.max() - chord_pitch.min()) % 12 == 10 else 0
         hv_5 = 1 if (chord_pitch.max() - chord_pitch.min()) % 12 == 7 else 0
         hv_3 = 1 if (chord_pitch.max() - chord_pitch.min()) % 12 in [3, 4] else 0
@@ -320,8 +320,8 @@ def get_panalysis_features(part) -> Tuple[np.ndarray, List]:
         note_array = part.note_array(include_time_signature=True, include_metrical_position=True)
     octave_oh, octave_names = get_octave_one_hot(part, note_array)
     pc_oh, pc_names = get_pc_one_hot(part, note_array)
-    # duration_feature = np.expand_dims(1- (1/(1+np.exp(-3*(note_array["duration_beat"]/note_array["ts_beats"])))-0.5)*2, 1)
-    duration_feature = np.expand_dims(1 - np.tanh(note_array["duration_beat"] / note_array["ts_beats"]), 1)
+    # duration_feature = np.expand_dims(1- (1/(1+np.exp(-3*(note_array["duration_div"]/note_array["ts_beats"])))-0.5)*2, 1)
+    duration_feature = np.expand_dims(1 - np.tanh(note_array["duration_div"] / note_array["ts_beats"]), 1)
     dur_names = ["bar_exp_duration"]
     voice = np.expand_dims(note_array["voice"], 1)
     voice_names = ["voice"]

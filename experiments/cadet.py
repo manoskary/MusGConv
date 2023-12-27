@@ -18,6 +18,7 @@ parser.add_argument('--dropout', type=float, default=0.5)
 parser.add_argument('--lr', type=float, default=0.007)
 parser.add_argument('--weight_decay', type=float, default=0.007)
 parser.add_argument("--num_workers", type=int, default=20)
+parser.add_argument("--verbose", action="store_true", help="Verbose for dataset loading")
 parser.add_argument("--load_from_checkpoint", action="store_true", help="Load model from WANDB checkpoint")
 parser.add_argument("--force_reload", action="store_true", help="Force reload of the data")
 parser.add_argument("--model", type=str, default="RelEdgeConv", help="Block Convolution Model to use")
@@ -65,7 +66,7 @@ name = "{}_{}-{}x{}-lr={}-wd={}-dr={}-rl={}-jk={}".format(("Het" if args.heterog
 
 datamodule = GraphCadenceDataModule(
     batch_size=args.batch_size, num_workers=num_workers,
-    force_reload=force_reload, max_size=1000)
+    force_reload=force_reload, max_size=1000, verbose=args.verbose,)
 datamodule.setup()
 model = CadenceClassificationModelLightning(
     input_features=datamodule.features, output_features=4, use_reledge=args.use_reledge,

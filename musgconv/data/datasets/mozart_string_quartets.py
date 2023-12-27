@@ -21,8 +21,8 @@ class MozartStringQuartetDataset(BuiltinDataset):
         self.process()
 
     def process(self):
-        root = os.path.join(self.raw_path, "kern")
-        self.scores = [os.path.join(root, file) for file in os.listdir(root) if file.endswith(".krn")]
+        root = os.path.join(self.raw_path, "musicxml")
+        self.scores = [os.path.join(root, file) for file in os.listdir(root) if file.endswith(".musicxml")]
         self.collections = ["mozart"]*len(self.scores)
 
     def has_cache(self):
@@ -152,6 +152,8 @@ class MozartStringQuartetCadenceGraphDataset(musgconvDataset):
                 include_staff=True,
                 include_pitch_spelling=True,
             )
+            # assert that the note array contains voice information and has no NaNs
+            assert np.all(note_array["voice"] >= 0), "Voice information is missing for score {}.".format(score_fn)
             note_features = select_features(note_array, "cadence")
             nodes, edges = hetero_graph_from_note_array(note_array)
             labels = self.get_labels(annotation, note_array, score_key)

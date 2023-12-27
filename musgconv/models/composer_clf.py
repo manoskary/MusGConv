@@ -70,6 +70,7 @@ class ComposerClassificationModelLightning(LightningModule):
         self.input_features = input_features
         self.hidden_features = hidden_features
         self.output_features = output_features
+        self.use_wandb = kwargs.get("use_wandb", False)
         self.module = ComposerClassificationModel(input_features, hidden_features, output_features, num_layers,
                                                   activation=activation, dropout=dropout,
                                                   use_reledge=use_reledge, metrical=metrical, **kwargs)
@@ -121,8 +122,11 @@ class ComposerClassificationModelLightning(LightningModule):
         self.log("test_loss", loss.item(), batch_size=batch_size)
         self.log("test_acc", acc.item(), batch_size=batch_size)
         self.log("test_f1", fscore.item(), batch_size=batch_size)
-        # self.log("y_true", y)
-        # self.log("y_pred", y_hat)
+        # Log WANDB table
+        columns = ["ground_truth", "prediction"]
+        data = [[y[i].item(), y_hat[i].argmax().item()] for i in range(len(y))]
+        if self.use_wandb:
+            self.logger.log_table(key="test_table",  columns=columns, table=data)
         return loss
 
     def common_step(self, batch, batch_idx):

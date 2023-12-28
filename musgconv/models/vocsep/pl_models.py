@@ -303,6 +303,8 @@ class MetricalVoiceLinkPredictionModel(VocSepLightningModule):
         reg_loss = self.reg_loss(
             batch["potential_edges"], self.module.predict(h, batch["potential_edges"],
                                                           pitch_score, onset_score), pos_edges, len(batch["x"]))
+        # filter out nan reg_loss
+        reg_loss = 0 if torch.isnan(reg_loss) else reg_loss
         batch_pred = torch.cat((pos_out, neg_out), dim=0)
         loss = self.train_loss(pos_out, neg_out)
         batch_pred = torch.cat((1 - batch_pred, batch_pred), dim=1).squeeze()

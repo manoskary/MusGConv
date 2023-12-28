@@ -17,7 +17,7 @@ import numpy as np
 
 class GraphCadenceDataModule(LightningDataModule):
     def __init__(
-            self, batch_size=50, num_workers=4, force_reload=False, verbose=False, include_measures=False, max_size=10000
+            self, batch_size=50, num_workers=4, force_reload=False, verbose=False, include_measures=False, max_size=10000, use_all_features=False
     ):
         super(GraphCadenceDataModule, self).__init__()
         self.batch_size = batch_size
@@ -26,6 +26,7 @@ class GraphCadenceDataModule(LightningDataModule):
         self.force_reload = force_reload
         self.normalize_features = True
         self.include_measures = include_measures
+        self.use_all_features = use_all_features
         self.datasets = [
             MozartStringQuartetCadenceGraphDataset(force_reload=self.force_reload, nprocs=self.num_workers, verbose=verbose, max_size=max_size),
             MozartPianoSonatasCadenceGraphDataset(force_reload=self.force_reload, nprocs=self.num_workers, verbose=verbose, max_size=max_size),
@@ -35,7 +36,8 @@ class GraphCadenceDataModule(LightningDataModule):
         if not (all([d.features == self.datasets[0].features for d in self.datasets])):
             raise Exception("Input dataset has different features, Datasets {} with sizes: {}".format(
                 " ".join([d.name for d in self.datasets]), " ".join([str(d.features) for d in self.datasets])))
-        self.features = self.datasets[0].features
+        # all datasets have the same features
+        self.features = self.datasets[0].features if self.use_all_features else 16
 
     def prepare_data(self):
         pass
@@ -67,7 +69,7 @@ class GraphCadenceDataModule(LightningDataModule):
             out["beat_edges"] = e["beat_edges"].long().squeeze()
             out["measure_nodes"] = e["measure_nodes"].long().squeeze()
             out["measure_edges"] = e["measure_edges"].long().squeeze()
-        out["x"] = e["x"].squeeze(0)
+        out["x"] = e["x"].squeeze(0) if self.use_all_features else e["x"][:, :self.features]
         out["y"] = e["y"].squeeze(0)
         out["edge_index"] = e["edge_index"].squeeze(0)
         out["edge_type"] = e["edge_type"].squeeze(0)
@@ -95,7 +97,7 @@ class GraphCadenceDataModule(LightningDataModule):
                 beat_eindex.append(e["beat_edges"].long())
                 measures.append(e["measure_nodes"].long())
                 measure_eindex.append(e["measure_edges"].long())
-            x.append(e["x"])
+            x.append(e["x"] if self.use_all_features else e["x"][:, :self.features])
             lengths.append(e["x"].shape[0])
             edge_index.append(e["edge_index"])
             edge_types.append(e["edge_type"])

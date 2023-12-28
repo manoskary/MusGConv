@@ -171,7 +171,7 @@ class CadenceClassificationModelLightning(LightningModule):
         if self.use_wandb:
             columns = ["ground_truth", "prediction"]
             self.logger.log_table(
-                name="test_table",
+                key="test_table",
                 columns=columns,
                 data=[[y[i].item(), y_hat[i].argmax().item()] for i in range(len(y))],
             )

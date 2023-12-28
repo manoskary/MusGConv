@@ -34,6 +34,7 @@ parser.add_argument("--use_wandb", action="store_true", help="Use wandb")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions of the same type")
 parser.add_argument("--heterogeneous", action="store_true", help="Use heterogeneous graphs")
+parser.add_argument("--use_all_features", action="store_true", help="Use all features including cadence features and interval vectors otherwise use only 16 features for pitch spelling features and duration.")
 parser.add_argument("--return_edge_emb", action="store_true", help="Input edge embeddings from the previous Encoder layer to the next.")
 parser.add_argument("--use_signed_features", action="store_true", help="Use singed instead of absolute edge features in the reledge model. It applies only when use_reledge is True")
 
@@ -67,7 +68,7 @@ name = "{}-{}x{}-lr={}-wd={}-dr={}-rl={}-jk={}".format(args.model,
 
 datamodule = GraphCadenceDataModule(
     batch_size=args.batch_size, num_workers=num_workers,
-    force_reload=force_reload, max_size=1000, verbose=args.verbose,)
+    force_reload=force_reload, max_size=1000, verbose=args.verbose, use_all_features=args.use_all_features)
 datamodule.setup()
 model = CadenceClassificationModelLightning(
     input_features=datamodule.features, output_features=4, use_reledge=args.use_reledge,

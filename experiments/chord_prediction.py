@@ -31,7 +31,7 @@ parser.add_argument("--label_smoothing", type=float, default=0.0, help="Label sm
 parser.add_argument("--use_ckpt", type=str, default=None, help="Use checkpoint for prediction.")
 parser.add_argument("--num_tasks", type=int, default=11, choices=[5, 11, 14], help="Number of tasks to train on.")
 parser.add_argument("--data_version", type=str, default="v1.0.0", choices=["v1.0.0", "latest"], help="Version of the dataset to use.")
-parser.add_argument("--n_epochs", type=int, default=50, help="Number of epochs to train for.")
+parser.add_argument("--n_epochs", type=int, default=100, help="Number of epochs to train for.")
 parser.add_argument("--transpose", action="store_true", help="Transpose the training data for Augmentation.")
 parser.add_argument("--use_reledge", action="store_true", help="Use relative edge features.")
 parser.add_argument("--use_metrical", action="store_true", help="Use metrical features.")

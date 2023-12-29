@@ -1,7 +1,9 @@
 # MusGConv: Music-informed Graph Convolutions 
 
 This package contains implementation of the paper _Perception-Inspired Graph Convolution for Music Understanding Tasks_
-submitted to AAAI 2024.
+submitted to IJCAI 2024. We propose a novel graph convolutional layer that is inspired by the way we perceive and learn
+pitch in music theory. We show that our layer outperforms SOTA graph convolutional layers in four music understanding tasks.
+The tasks are cadence detection, roman numeral analysis, composer classification and voice separation.
 
 ## Requirements
 
@@ -29,7 +31,44 @@ pip install -e .
 
 ## Running the Experiments
 
-To run the experiments, you can use the following command:
+We provide two main scripts to reproduce the experiments and tables of the paper.
+The first script is `run_main_experiment.py` which compares SOTA architectures for each 
+of our tasks to the same architecture where the graph convolutions are replaced with MusGConv.
+The second script is `run_ablation_experiment.py` which compares the performance of MusGConv with different
+configurations of the parameters of the MusGConv layer.
+
+To run the **main experiments**, you can use the following command:
+
+```shell
+python ./experiments/run_main_experiment.py --gpus <number of gpus> --use_wandb --wandb_entity <your_wandb_entity>
+```
+
+To run the **ablation experiments**, you can use the following command:
+
+```shell
+python ./experiments/run_ablation_experiment.py --gpus <number of gpus> --use_wandb --wandb_entity <your_wandb_entity>
+```
+
+For our paper, we used WandB to log our experiments. 
+To reproduce our results, you can simply provide your own WandB entity. The project name, groups, jobs and run 
+names will be automatically generated to match the paper.
+The results of the experiments will be logged in the same fashion as in the paper, so you can compare your results with ours.
+If you don't have a WandB account, you can create one for free.
+You can find our results here: https://wandb.ai/vocsep/MusGConv
+If you don't want to use WandB, don't use the flag `--use_wandb`.
+
+#### Using GPU for Training
+
+To use GPU for training, you can use the flag `--gpus` and specify the number of GPUs you want to use.
+In our experiments, we used a single GTX 1080 Ti GPU with 11GB of memory. If your GPU has less memory, you need to reduce the batch size.
+However, in the experiments above the batch size is set to match the results the paper.
+
+### Running Individual Experiments
+
+To run the individual experiments, you can use the following commands:
+To change the parameters of the experiments, you can use the arguments of the scripts, use `script_name.py --help` to see the arguments.
+
+```shell
 
 #### Cadence Detection
 
@@ -78,7 +117,7 @@ python ./experiments/cadet.py --use_wandb --wandb_entity <your_wandb_entity>
 
 ## Aknowledgements
 
-The code of this repository is based on the following repositories:
+We would like to give credit to the following repositories that we used to build our codebase:
 - [Cadet](https://github.com/manoskary/cadet)
 - [SymRep](https://github.com/anusfoil/SymRep)
 - [AugmentedNet](https://github.com/napulen/AugmentedNet)

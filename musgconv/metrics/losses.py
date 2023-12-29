@@ -18,6 +18,12 @@ class LinearAssignmentLoss(torch.nn.Module):
         super(LinearAssignmentLoss, self).__init__()
 
     def forward(self, edge_index: torch.Tensor, score, target_edges, num_nodes):
+        """Computes a regularization loss for linear assignment problems."""
+        # if score has NaNs, replace them with 0
+        assert num_nodes > 0
+        score = torch.where(torch.isnan(score), torch.zeros_like(score), score)
+        # Normalize the score and relu the score
+        score = F.normalize(F.relu(score), dim=-1)
         add_row = scatter(score, edge_index[0], dim=0, dim_size=num_nodes, reduce="sum")
         add_col = scatter(score, edge_index[1], dim=0, dim_size=num_nodes, reduce="sum")
         norm_row = torch.sqrt(scatter(torch.pow(score, 2), edge_index[0], dim=0, dim_size=num_nodes, reduce="sum"))
@@ -26,8 +32,8 @@ class LinearAssignmentLoss(torch.nn.Module):
         ones_col = torch.zeros((num_nodes,), device=edge_index.device)
         ones_row[target_edges[0]] = 1
         ones_col[target_edges[1]] = 1
-        l1 = torch.sqrt(torch.sum(torch.pow(add_row - ones_row, 2))/num_nodes) + torch.sqrt(torch.sum(torch.pow(add_col - ones_col, 2))/num_nodes)
-        l2 = torch.sqrt(torch.sum(torch.pow(norm_row - ones_row, 2))/num_nodes) + torch.sqrt(torch.sum(torch.pow(norm_col - ones_col, 2))/num_nodes)
+        # l1 = torch.sqrt(torch.sum(torch.pow(add_row - ones_row, 2))/num_nodes) + torch.sqrt(torch.sum(torch.pow(add_col - ones_col, 2))/num_nodes)
+        # l2 = torch.sqrt(torch.sum(torch.pow(norm_row - ones_row, 2))/num_nodes) + torch.sqrt(torch.sum(torch.pow(norm_col - ones_col, 2))/num_nodes)
         mse_1 = torch.pow(ones_row - add_row, 2).sum() + torch.pow(ones_col - add_col, 2).sum() # removed sqrt
         # mae_1 = torch.abs(ones_row - add_row).sum() + torch.abs(ones_col - add_col).sum()
         mse_2 = torch.pow(ones_row - norm_row, 2).sum() + torch.pow(ones_col - norm_col, 2).sum() # removed sqrt

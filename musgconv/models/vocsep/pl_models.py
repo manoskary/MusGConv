@@ -303,8 +303,7 @@ class MetricalVoiceLinkPredictionModel(VocSepLightningModule):
         reg_loss = self.reg_loss(
             batch["potential_edges"], self.module.predict(h, batch["potential_edges"],
                                                           pitch_score, onset_score), pos_edges, len(batch["x"]))
-        # filter out nan reg_loss
-        reg_loss = 0 if torch.isnan(reg_loss) else reg_loss
+
         batch_pred = torch.cat((pos_out, neg_out), dim=0)
         loss = self.train_loss(pos_out, neg_out)
         batch_pred = torch.cat((1 - batch_pred, batch_pred), dim=1).squeeze()
@@ -315,10 +314,12 @@ class MetricalVoiceLinkPredictionModel(VocSepLightningModule):
             .long()
             .to(self.device)
         )
+        reg_loss = reg_loss if torch.isfinite(reg_loss) else torch.zeros_like(reg_loss)
         self.log("train_regloss", reg_loss.item(), on_step=True, on_epoch=True, prog_bar=False, batch_size=1)
         self.log("regloss_weight", self.reg_loss_weight, on_step=False, on_epoch=True, prog_bar=False, batch_size=1)
         self.log("regloss_weighted", self.reg_loss_weight*reg_loss.item(), on_step=False, on_epoch=True, prog_bar=False, batch_size=1)
         self.train_metric_logging_step(loss, batch_pred, targets)
+        # filter out nan reg_loss for backward pass
         loss = loss + self.reg_loss_weight * reg_loss
         self.log("train_joinloss", loss.item(), on_step=False, on_epoch=True, prog_bar=False, batch_size=1)
         return loss

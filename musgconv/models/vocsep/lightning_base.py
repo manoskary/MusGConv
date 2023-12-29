@@ -69,7 +69,7 @@ class VocSepLightningModule(LightningModule):
 
     def on_train_epoch_end(self, *args, **kwargs):
         if self.reg_loss_type == "auto":
-            self.reg_loss_weight += 0.002
+            self.reg_loss_weight += 0.0001
 
     def validation_step(self, *args, **kwargs):
         """To be re-written by child"""

@@ -284,13 +284,13 @@ class ChordEncoder(nn.Module):
         # self.encoder = HeteroResGatedGraphConvLayer(n_hidden, n_hidden, etypes=self.etypes, reduction="none")
         # self.reduction = HeteroAttention(n_hidden, len(self.etypes.keys()))
         self.pool = OnsetEdgePoolingVersion2(n_hidden, dropout=dropout)
-        self.proj1 = nn.Linear(n_hidden+1, n_hidden)
-        self.layernorm1 = nn.BatchNorm1d(n_hidden)
-        self.proj2 = nn.Linear(n_hidden, n_hidden//2)
-        self.layernorm2 = nn.BatchNorm1d(n_hidden//2)
-        self.gru = nn.GRU(input_size=n_hidden//2, hidden_size=int(n_hidden/2), num_layers=2, bidirectional=True,
+        self.proj1 = nn.Linear(n_hidden+1, 256)
+        self.layernorm1 = nn.BatchNorm1d(256)
+        self.proj2 = nn.Linear(256, 128)
+        self.layernorm2 = nn.BatchNorm1d(128)
+        self.gru = nn.GRU(input_size=128, hidden_size=128, num_layers=2, bidirectional=True,
                           batch_first=True, dropout=dropout)
-        self.layernormgru = nn.LayerNorm(n_hidden)
+        self.layernormgru = nn.LayerNorm(256)
         self.reset_parameters()
 
     def reset_parameters(self):

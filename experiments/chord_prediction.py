@@ -14,7 +14,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpus', type=str, default="0")
 parser.add_argument('--n_layers', type=int, default=2)
-parser.add_argument('--n_hidden', type=int, default=256)
+parser.add_argument('--n_hidden', type=int, default=128)
 parser.add_argument('--dropout', type=float, default=0.44)
 parser.add_argument('--batch_size', type=int, default=150)
 parser.add_argument('--lr', type=float, default=0.0015)

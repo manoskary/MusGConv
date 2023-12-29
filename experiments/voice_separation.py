@@ -109,7 +109,6 @@ trainer = Trainer(
     logger=wandb_logger if args.use_wandb else None,
     # plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
     # replace_sampler_ddp=False,
-    gradient_clip_val=0.5,
     reload_dataloaders_every_n_epochs=5,
     callbacks=[checkpoint_callback],
     )

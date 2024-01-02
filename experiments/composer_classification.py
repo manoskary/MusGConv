@@ -33,6 +33,7 @@ parser.add_argument("--pitch_embedding", type=int, default=None, help="Pitch emb
 parser.add_argument("--model", type=str, default="MusGConv", help="Block Convolution Model to use")
 parser.add_argument("--use_wandb", action="store_true", help="Use wandb")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
+parser.add_argument("--aggregation", type=str, default="cat", choices=["cat", "add", "mul"], help="Aggregation method for the edge features in MusGConv.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions")
 parser.add_argument("--return_edge_emb", action="store_true", help="Input edge embeddings from the previous Encoder layer to the next.")
 parser.add_argument("--use_signed_features", action="store_true", help="Use singed instead of absolute edge features in the reledge model. It applies only when use_reledge is True")
@@ -65,7 +66,7 @@ if args.use_wandb:
         entity=args.wandb_entity,
         project="MusGConv",
         group=f"Composer Classification",
-        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}",
+        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}{'-noCat' if args.aggregation != 'cat' else ''}",
         # tags=tags,
         name=name)
     wandb_logger.log_hyperparams(args)
@@ -83,7 +84,8 @@ else:
         num_layers=n_layers, output_features=datamodule.n_classes, lr=args.lr, dropout=args.dropout,
         weight_decay=args.weight_decay, use_reledge=args.use_reledge, metrical=args.use_metrical,
         pitch_embedding=args.pitch_embedding, use_jk=args.use_jk, conv_block=args.model, stack_convs=args.stack_convs,
-        use_signed_features=args.use_signed_features, return_edge_emb=args.return_edge_emb, use_wandb=args.use_wandb,)
+        use_signed_features=args.use_signed_features, return_edge_emb=args.return_edge_emb, use_wandb=args.use_wandb,
+        aggregation=args.aggregation,)
 
 
 checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="val_f1", mode="max")

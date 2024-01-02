@@ -18,7 +18,7 @@ custom_confs = ["", "", "--use_all_features", ""]
 
 use_wandb = " --use_wandb" if args.use_wandb else ""
 
-for base_model, script_name, custom_confs in zip(script_names, baseline_model_names, custom_confs):
+for script_name, base_model, custom_confs in zip(script_names, baseline_model_names, custom_confs):
     # Run the previous SOTA architecture
     os.system(f"python {file_path}/{script_name} --gpus {args.gpus}{use_wandb} --wandb_entity {args.wandb_entity} --model {base_model} {custom_confs} --seed {args.seed}")
 

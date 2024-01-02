@@ -78,6 +78,7 @@ class MusGConv(MessagePassing):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.return_edge_emb = return_edge_emb
+        self.aggregation = kwargs.get("aggregation", "cat")
         self.in_edge_channels = in_edge_channels if in_edge_channels > 0 else in_channels
         self.lin = nn.Linear(in_channels, out_channels)
         self.edge_mlp = nn.Sequential(
@@ -86,7 +87,7 @@ class MusGConv(MessagePassing):
             nn.BatchNorm1d(out_channels),
             nn.Linear(out_channels, out_channels),
         )
-        self.proj = nn.Linear(3 * out_channels, out_channels)
+        self.proj = nn.Linear(3 * out_channels, out_channels) if self.aggregation == "cat" else nn.Linear(2 * out_channels, out_channels)
         self.bias = nn.Parameter(torch.zeros(out_channels)) if bias else None
         self.reset_parameters()
 
@@ -113,7 +114,14 @@ class MusGConv(MessagePassing):
         return h
 
     def message(self, x_j, edge_attr):
-        return torch.cat((x_j, edge_attr), dim=-1)
+        if self.aggregation == "cat":
+            return torch.cat((x_j, edge_attr), dim=-1)
+        elif self.aggregation == "add":
+            return x_j + edge_attr
+        elif self.aggregation == "mul":
+            return x_j * edge_attr
+        else:
+            raise ValueError("Aggregation type not supported")
 
 
 class RelEdgeConv(nn.Module):

@@ -18,7 +18,7 @@ parser.add_argument('--dropout', type=float, default=0.5)
 parser.add_argument('--lr', type=float, default=0.007)
 parser.add_argument('--weight_decay', type=float, default=0.007)
 parser.add_argument("--num_workers", type=int, default=20)
-parser.add_argument("--n_epochs", type=int, default=50, help="Number of epochs to train for.")
+parser.add_argument("--n_epochs", type=int, default=100, help="Number of epochs to train for.")
 parser.add_argument("--verbose", action="store_true", help="Verbose for dataset loading")
 parser.add_argument("--load_from_checkpoint", action="store_true", help="Load model from WANDB checkpoint")
 parser.add_argument("--force_reload", action="store_true", help="Force reload of the data")
@@ -31,6 +31,7 @@ parser.add_argument("--use_reledge", action="store_true", help="Use reledge")
 parser.add_argument("--use_metrical", action="store_true", help="Use metrical graphs")
 parser.add_argument("--pitch_embedding", type=int, default=None, help="Pitch embedding size to use")
 parser.add_argument("--use_wandb", action="store_true", help="Use wandb")
+parser.add_argument("--aggregation", type=str, default="cat", choices=["cat", "add", "mul"], help="Aggregation method for the edge features in MusGConv.")
 parser.add_argument("--wandb_entity", type=str, default=None, help="Wandb entity to use.")
 parser.add_argument("--stack_convs", action="store_true", help="Stack convolutions of the same type")
 parser.add_argument("--heterogeneous", action="store_true", help="Use heterogeneous graphs")
@@ -72,7 +73,7 @@ model = CadenceClassificationModelLightning(
     lr=args.lr, weight_decay=args.weight_decay, metrical=args.use_metrical, use_jk=args.use_jk,
     stack_convs=args.stack_convs, pitch_embedding=args.pitch_embedding, reg_loss_weight=args.reg_loss_weight,
     hetero=args.heterogeneous, conv_block=args.model, use_signed_features=args.use_signed_features,
-    return_edge_emb=args.return_edge_emb, use_wandb=args.use_wandb
+    return_edge_emb=args.return_edge_emb, use_wandb=args.use_wandb, aggregation=args.aggregation,
 )
 
 if args.use_wandb:
@@ -81,7 +82,7 @@ if args.use_wandb:
         entity=args.wandb_entity,
         project="MusGConv",
         group=f"Cadence Classification",
-        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}",
+        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}{'-noCat' if args.aggregation != 'cat' else ''}",
         # tags=tags,
         name=name)
     wandb_logger.log_hyperparams(args)

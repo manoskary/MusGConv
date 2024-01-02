@@ -3,12 +3,11 @@ import torch
 import random
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, StochasticWeightAveraging
-from pytorch_lightning import Trainer
+from pytorch_lightning import Trainer, seed_everything
 # from pytorch_lightning.tuner.tuning import Tuner
 from musgconv.models.composer_clf import ComposerClassificationModelLightning
 from musgconv.data.datamodules.graph_classification import ComposerClassificationGraphDataModule
 # from pytorch_lightning.plugins import DDPPlugin
-# from pytorch_lightning.utilities.seed import seed_everything
 import argparse
 
 
@@ -17,6 +16,7 @@ parser.add_argument('--gpus', type=str, default="0")
 parser.add_argument('--n_layers', type=int, default=2)
 parser.add_argument('--n_hidden', type=int, default=64)
 parser.add_argument('--dropout', type=float, default=0.5)
+parser.add_argument('--seed', type=int, default=0, help="Seed for reproducibility")
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--weight_decay', type=float, default=5e-4)
 parser.add_argument("--num_workers", type=int, default=20)
@@ -37,13 +37,10 @@ parser.add_argument("--stack_convs", action="store_true", help="Stack convolutio
 parser.add_argument("--return_edge_emb", action="store_true", help="Input edge embeddings from the previous Encoder layer to the next.")
 parser.add_argument("--use_signed_features", action="store_true", help="Use singed instead of absolute edge features in the reledge model. It applies only when use_reledge is True")
 
-# for reproducibility
-torch.manual_seed(0)
-random.seed(0)
-# torch.use_deterministic_algorithms(True)
-# seed_everything(seed=0, workers=True)
-
 args = parser.parse_args()
+# for reproducibility
+seed_everything(seed=args.seed, workers=True)
+
 if args.gpus == "-1":
     devices = 1
     use_ddp = False

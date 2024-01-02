@@ -3,19 +3,17 @@ import torch
 import random
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, StochasticWeightAveraging
-from pytorch_lightning import Trainer
-from pytorch_lightning.tuner.tuning import Tuner
+from pytorch_lightning import Trainer, seed_everything
 from musgconv.models.vocsep import MetricalVoiceLinkPredictionModel
 from musgconv.data.datamodules.mix_vs import GraphMixVSDataModule
-# from pytorch_lightning.plugins import DDPPlugin
-from musgconv.utils.visualization import show_voice_pr
-# from pytorch_lightning.utilities.seed import seed_everything
+from pytorch_lightning.callbacks import LearningRateMonitor
 import argparse
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--collection', type=str, default="split")
 parser.add_argument('--gpus', type=str, default="0")
+parser.add_argument('--seed', type=int, default=0, help="Seed for reproducibility")
 parser.add_argument('--n_layers', type=int, default=2)
 parser.add_argument('--n_hidden', type=int, default=32)
 parser.add_argument('--dropout', type=float, default=0.5)
@@ -43,14 +41,11 @@ parser.add_argument("--stack_convs", action="store_true", help="Stack convolutio
 parser.add_argument("--return_edge_emb", action="store_true", help="Input edge embeddings from the previous Encoder layer to the next.")
 parser.add_argument("--use_signed_features", action="store_true", help="Use singed instead of absolute edge features in the reledge model. It applies only when use_reledge is True")
 
-
-# for reproducibility
-torch.manual_seed(0)
-random.seed(0)
-# torch.use_deterministic_algorithms(True)
-# seed_everything(seed=0, workers=True)
-
 args = parser.parse_args()
+# for reproducibility
+seed_everything(seed=args.seed, workers=True)
+
+
 if args.gpus == "-1":
     devices = 1
     use_ddp = False
@@ -102,6 +97,7 @@ else:
 
 print("Only monophonic:", model.linear_assignment)
 checkpoint_callback = ModelCheckpoint(save_top_k=1, monitor="val_fscore", mode="max")
+lr_monitor = LearningRateMonitor(logging_interval='step')
 # swa_callback = StochasticWeightAveraging(swa_lrs=1e-2)
 trainer = Trainer(
     max_epochs=args.n_epochs, accelerator="auto", devices=devices,
@@ -110,7 +106,7 @@ trainer = Trainer(
     # plugins=DDPPlugin(find_unused_parameters=True) if use_ddp else None,
     # replace_sampler_ddp=False,
     reload_dataloaders_every_n_epochs=5,
-    callbacks=[checkpoint_callback],
+    callbacks=[checkpoint_callback, lr_monitor],
     )
 
 # Find Batch Size

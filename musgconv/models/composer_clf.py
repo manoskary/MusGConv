@@ -123,10 +123,10 @@ class ComposerClassificationModelLightning(LightningModule):
         self.log("test_acc", acc.item(), batch_size=batch_size)
         self.log("test_f1", fscore.item(), batch_size=batch_size)
         # Log WANDB table
-        columns = ["ground_truth", "prediction"]
-        data = [[y[i].item(), y_hat[i].argmax().item()] for i in range(len(y))]
-        if self.use_wandb:
-            self.logger.log_table(key="test_table",  columns=columns, data=data)
+        # columns = ["ground_truth", "prediction"]
+        # data = [[y[i].item(), y_hat[i].argmax().item()] for i in range(len(y))]
+        # if self.use_wandb:
+        #     self.logger.log_table(key="test_table",  columns=columns, data=data)
         return loss
 
     def common_step(self, batch, batch_idx):

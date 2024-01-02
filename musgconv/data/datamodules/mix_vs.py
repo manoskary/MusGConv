@@ -180,7 +180,7 @@ class GraphMixVSDataModule(LightningDataModule):
             idxs = range(len(self.datasets_map))
             collections = [self.datasets[self.datasets_map[i][0]].graphs[self.datasets_map[i][1]].collection for i
                            in idxs]
-            trainval_idx, test_idx = train_test_split(idxs, test_size=0.3, stratify=collections, random_state=0)
+            trainval_idx, test_idx = train_test_split(idxs, test_size=0.2, stratify=collections, random_state=0)
             trainval_collections = [collections[i] for i in trainval_idx]
             train_idx, val_idx = train_test_split(trainval_idx, test_size=0.1, stratify=trainval_collections,
                                                   random_state=0)

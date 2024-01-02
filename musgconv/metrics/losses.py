@@ -21,7 +21,7 @@ class LinearAssignmentLoss(torch.nn.Module):
         """Computes a regularization loss for linear assignment problems."""
         # if score has NaNs, replace them with 0
         assert num_nodes > 0
-        score = torch.where(torch.isnan(score), torch.zeros_like(score), score)
+        assert torch.isfinite(score).all()
         # Normalize the score and relu the score
         score = F.normalize(F.relu(score), dim=-1)
         add_row = scatter(score, edge_index[0], dim=0, dim_size=num_nodes, reduce="sum")

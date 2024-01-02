@@ -168,13 +168,13 @@ class CadenceClassificationModelLightning(LightningModule):
         self.log("test_loss", loss.item(), batch_size=batch["x"].shape[0])
         self.log("test_acc", acc.item(), batch_size=batch["x"].shape[0])
         self.log("test_f1", fscore.item(), batch_size=batch["x"].shape[0])
-        if self.use_wandb:
-            columns = ["ground_truth", "prediction"]
-            self.logger.log_table(
-                key="test_table",
-                columns=columns,
-                data=[[y[i].item(), y_hat[i].argmax().item()] for i in range(len(y))],
-            )
+        # if self.use_wandb:
+        #     columns = ["ground_truth", "prediction"]
+        #     self.logger.log_table(
+        #         key="test_table",
+        #         columns=columns,
+        #         data=[[y[i].item(), y_hat[i].argmax().item()] for i in range(len(y))],
+        #     )
 
     def common_step(self, batch, batch_idx):
         """ batch is dict with keys the variable names"""

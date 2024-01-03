@@ -200,15 +200,16 @@ class HeteroMusGConvEncoder(nn.Module):
         super().__init__()
         self.in_edge_features = kwargs.get("in_edge_features", 0)
         self.return_edge_emb = kwargs.get("return_edge_emb", False)
+        aggregation = kwargs.get("aggregation", "cat")
         self.layers = nn.ModuleList()
-        self.layers.append(HeteroMusGConv(in_channels, out_channels, metadata, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb))
+        self.layers.append(HeteroMusGConv(in_channels, out_channels, metadata, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb, aggregation=aggregation))
         if n_layers > 2:
             for i in range(n_layers - 2):
                 self.layers.append(HeteroMusGConv(
                     out_channels, out_channels, metadata,
                     in_edge_features=(out_channels if self.return_edge_emb else 0),
-                    return_edge_emb=self.return_edge_emb))
-        self.layers.append(HeteroMusGConv(out_channels, out_channels, metadata, in_edge_features=(out_channels if self.return_edge_emb else 0), return_edge_emb=False))
+                    return_edge_emb=self.return_edge_emb, aggregation=aggregation))
+        self.layers.append(HeteroMusGConv(out_channels, out_channels, metadata, in_edge_features=(out_channels if self.return_edge_emb else 0), return_edge_emb=False, aggregation=aggregation))
         self.dropout = dropout
         self.activation = activation
 

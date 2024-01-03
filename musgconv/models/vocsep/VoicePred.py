@@ -279,6 +279,7 @@ class MetricalLinkPredictionModel(nn.Module):
         self.pitch_embedding = 0 if self.pitch_embedding is None else self.pitch_embedding
         self.in_edge_features = 5+self.pitch_embedding if use_reledge else 0
         self.return_edge_emb = kwargs.get("return_edge_emb", False)
+        aggregation = kwargs.get("aggregation", "cat")
         if block == "ResConv":
             print("Using ResGatedGraphConv")
             enc = ResGatedConvEncoder(in_feats, n_hidden, n_layers=n_layers, dropout=dropout, activation=activation)
@@ -294,8 +295,10 @@ class MetricalLinkPredictionModel(nn.Module):
         elif block == "RelEdgeConv" or block == "MusGConv":
             print("Using MusGConv")
             self.encoder = HeteroMusGConvEncoder(in_feats, n_hidden, metadata=METADATA, n_layers=n_layers,
-                                               dropout=dropout, activation=activation,
-                                               in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb)
+                                                 dropout=dropout, activation=activation,
+                                                 in_edge_features=self.in_edge_features,
+                                                 return_edge_emb=self.return_edge_emb,
+                                                 aggregation=aggregation)
         else:
             raise ValueError("Block type not supported")
         kwargs["conv_block"] = block
@@ -306,13 +309,15 @@ class MetricalLinkPredictionModel(nn.Module):
         # self.embed = MetricalGNN(in_feats, n_hidden, n_hidden, etypes, n_layers, dropout, use_reledge=use_reledge,
         #                          in_edge_features=5+self.pitch_embedding, metrical=use_metrical, **kwargs)
         self.predictor = nn.Sequential(
-            nn.Linear(n_hidden*2+3, int(n_hidden)),
+            nn.Linear(n_hidden*2+3, n_hidden),
             nn.ReLU(),
+            nn.LayerNorm(n_hidden),
             nn.Dropout(dropout),
-            nn.Linear(int(n_hidden), int(n_hidden/2)),
+            nn.Linear(n_hidden, n_hidden//2),
             nn.ReLU(),
+            nn.LayerNorm(n_hidden//2),
             nn.Dropout(dropout),
-            nn.Linear(int(n_hidden/2), 1))
+            nn.Linear(n_hidden//2, 1))
 
     def reset_parameters(self):
         nn.init.constant_(self.score_weight, 0)

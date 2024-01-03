@@ -22,8 +22,7 @@ class LinearAssignmentLoss(torch.nn.Module):
         # if score has NaNs, replace them with 0
         assert num_nodes > 0
         assert torch.isfinite(score).all()
-        # Normalize the score and relu the score
-        score = F.normalize(F.relu(score), dim=-1)
+        # score = torch.where(torch.isfinite(score), score, torch.zeros_like(score))
         add_row = scatter(score, edge_index[0], dim=0, dim_size=num_nodes, reduce="sum")
         add_col = scatter(score, edge_index[1], dim=0, dim_size=num_nodes, reduce="sum")
         norm_row = torch.sqrt(scatter(torch.pow(score, 2), edge_index[0], dim=0, dim_size=num_nodes, reduce="sum"))

@@ -22,6 +22,7 @@ class ComposerClassificationModel(nn.Module):
         pitch_embeddding = kwargs.get("pitch_embedding", 0)
         pitch_embeddding = 0 if pitch_embeddding is None else pitch_embeddding
         self.in_edge_features = 5 + pitch_embeddding
+        aggregation = kwargs.get("aggregation", "cat")
         block = kwargs.get("conv_block", "SageConv")
         if block == "ResConv":
             print("Using ResGatedGraphConv")
@@ -37,7 +38,7 @@ class ComposerClassificationModel(nn.Module):
             self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
         elif block == "RelEdgeConv" or block == "MusGConv":
             print("Using MusGConv")
-            self.encoder = HeteroMusGConvEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb)
+            self.encoder = HeteroMusGConvEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb, aggregation=aggregation)
         else:
             raise ValueError("Block type not supported")
         kwargs["conv_block"] = block

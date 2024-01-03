@@ -499,7 +499,7 @@ class HeteroMusGConv(nn.Module):
         Converted module
     """
 
-    def __init__(self, in_features, out_features, metadata, in_edge_features=0, bias=True, reduction='mean', return_edge_emb=False):
+    def __init__(self, in_features, out_features, metadata, in_edge_features=0, bias=True, reduction='mean', return_edge_emb=False, aggregation="cat"):
         super(HeteroMusGConv, self).__init__()
         self.out_features = out_features
         self.return_edge_emb = return_edge_emb
@@ -520,7 +520,7 @@ class HeteroMusGConv(nn.Module):
         conv_dict = dict()
         for etype in self.etypes:
             etype_str = "_".join(etype)
-            conv_dict[etype_str] = MusGConv(in_features, out_features, bias=bias, in_edge_channels=in_edge_features, return_edge_emb=return_edge_emb)
+            conv_dict[etype_str] = MusGConv(in_features, out_features, bias=bias, in_edge_channels=in_edge_features, return_edge_emb=return_edge_emb, aggregation=aggregation)
         self.conv = nn.ModuleDict(conv_dict)
         self.reset_parameters()
 

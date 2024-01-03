@@ -84,7 +84,7 @@ class MusGConv(MessagePassing):
         self.edge_mlp = nn.Sequential(
             nn.Linear(self.in_edge_channels, out_channels),
             nn.ReLU(),
-            nn.BatchNorm1d(out_channels),
+            nn.LayerNorm(out_channels),
             nn.Linear(out_channels, out_channels),
         )
         self.proj = nn.Linear(3 * out_channels, out_channels) if self.aggregation == "cat" else nn.Linear(2 * out_channels, out_channels)

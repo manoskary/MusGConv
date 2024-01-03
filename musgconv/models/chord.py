@@ -409,9 +409,11 @@ class MetricalChordEncoder(nn.Module):
                        "rest_rev": 6}
         # self.embedding = nn.Linear(in_feats-1, n_hidden)
         pitch_embedding = kwargs.get("pitch_embedding", 0)
+        pitch_embedding = pitch_embedding if pitch_embedding is not None else 0
         return_edge_emb = kwargs.get("return_edge_emb", False)
         block = kwargs.get("conv_block", "SageConv")
         self.use_rel_edge = kwargs.get("use_reledge", False)
+        aggregation = kwargs.get("aggregation", "cat")
         self.in_edge_features = 3+pitch_embedding if self.use_rel_edge else 0
         if block == "ResConv":
             print("Using ResGatedGraphConv")
@@ -427,7 +429,7 @@ class MetricalChordEncoder(nn.Module):
             self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
         elif block == "RelEdgeConv" or block == "MusGConv":
             self.encoder = HeteroMusGConvEncoder(64, n_hidden, metadata=METADATA, n_layers=n_layers, dropout=dropout, activation=activation,
-                                               in_edge_features=self.in_edge_features, return_edge_emb=return_edge_emb)
+                                               in_edge_features=self.in_edge_features, return_edge_emb=return_edge_emb, aggregation=aggregation)
         else:
             raise ValueError("Block type not supported")
         kwargs["conv_block"] = block
@@ -1082,11 +1084,11 @@ class MetricalChordPrediction(LightningModule):
         self.etypes = {"onset": 0, "consecutive": 1, "during": 2, "rest": 3, "consecutive_rev": 4, "during_rev": 5,
                        "rest_rev": 6}
         self.use_signed_features = kwargs.get("use_signed_features", False)
-        pitch_embedding = kwargs.get("pitch_embedding", 0)
+        pitch_embedding = kwargs.get("pitch_embedding", None)
         self.module = MetricalChordPredictionModel(
             in_feats, n_hidden, tasks, n_layers, activation, dropout,
             use_nade=use_nade, use_jk=use_jk, use_reledge=use_reledge, metrical=use_metrical, **kwargs).float().to(self.device)
-        self.pitch_embedding = torch.nn.Embedding(12, 16) if pitch_embedding != 0 else pitch_embedding
+        self.pitch_embedding = torch.nn.Embedding(12, 16) if pitch_embedding is not None else pitch_embedding
         self.lr = lr
         self.weight_decay = weight_decay
         self.test_roman = list()

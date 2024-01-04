@@ -82,7 +82,7 @@ if args.use_wandb:
         entity=args.wandb_entity,
         project="MusGConv",
         group=f"Cadence Classification",
-        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}{'-noCat' if args.aggregation != 'cat' else ''}",
+        job_type=f"{args.model}-{'wPE' if args.pitch_embedding is not None else 'woPE'}-{'wEF' if args.use_reledge else 'woEF'}-{'wSEF' if args.use_signed_features else 'woSEF'}-{'wEE' if args.return_edge_emb else 'woEE'}{'-noCat' if args.aggregation != 'cat' else ''} {'' if args.use_all_features else '-minF'}",
         # tags=tags,
         name=name)
     wandb_logger.log_hyperparams(args)

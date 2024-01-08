@@ -21,7 +21,7 @@ class ComposerClassificationModel(nn.Module):
         self.output_features = output_features
         pitch_embeddding = kwargs.get("pitch_embedding", 0)
         pitch_embeddding = 0 if pitch_embeddding is None else pitch_embeddding
-        self.in_edge_features = 5 + pitch_embeddding
+        self.in_edge_features = 5 + pitch_embeddding if use_reledge else 0
         aggregation = kwargs.get("aggregation", "cat")
         block = kwargs.get("conv_block", "SageConv")
         if block == "ResConv":
@@ -147,7 +147,8 @@ class ComposerClassificationModelLightning(LightningModule):
                 edge_features = F.normalize(edge_features, dim=0)
                 edge_feature_dict[k] = edge_features
         else:
-            edge_features = None
+            for k, edges in edge_index_dict.items():
+                edge_feature_dict[k] = None
         if self.pitch_embedding is not None and edge_features is not None:
             for k, edges in edge_index_dict.items():
                 pitch = self.pitch_embedding(torch.remainder(note_array[:, 0][edges[0]] - note_array[:, 0][edges[1]], 12).long())

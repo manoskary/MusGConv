@@ -5,7 +5,7 @@ from musgconv.utils import add_reverse_edges_from_edge_index
 from torchmetrics import Accuracy, F1Score
 from musgconv.utils import METADATA
 from torch_geometric.nn import to_hetero, global_mean_pool
-from musgconv.models.core.utils import HeteroMusGConvEncoder, SageEncoder, GATEncoder, ResGatedConvEncoder
+from musgconv.models.core.utils import HeteroMusGConvEncoder, SageEncoder, GATEncoder, ResGatedConvEncoder, EdgeConvEncoder
 
 
 class ComposerClassificationModel(nn.Module):
@@ -19,9 +19,11 @@ class ComposerClassificationModel(nn.Module):
         self.input_features = input_features
         self.hidden_features = hidden_features
         self.output_features = output_features
+        self.mixed_features = kwargs.get("mixed_features", False)
         pitch_embeddding = kwargs.get("pitch_embedding", 0)
         pitch_embeddding = 0 if pitch_embeddding is None else pitch_embeddding
         self.in_edge_features = 5 + pitch_embeddding if use_reledge else 0
+        self.in_edge_features = self.in_edge_features + input_features if self.mixed_features else self.in_edge_features
         aggregation = kwargs.get("aggregation", "cat")
         block = kwargs.get("conv_block", "SageConv")
         if block == "ResConv":
@@ -36,8 +38,12 @@ class ComposerClassificationModel(nn.Module):
             print("Using GATConv")
             enc = GATEncoder(input_features, hidden_features, n_layers=num_layers, dropout=dropout, activation=activation)
             self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
+        elif block == "EdgeConv":
+            print("Using EdgeConv")
+            enc = EdgeConvEncoder(input_features, hidden_features, n_layers=num_layers, dropout=dropout, activation=activation)
+            self.encoder = to_hetero(enc, metadata=METADATA, aggr="mean")
         elif block == "RelEdgeConv" or block == "MusGConv":
-            print("Using MusGConv")
+            print("Using MusGConv, aggregation: {}, use_reledge={}, forward_edge_embedding={}".format(aggregation, use_reledge, self.return_edge_emb))
             self.encoder = HeteroMusGConvEncoder(input_features, hidden_features, METADATA, n_layers=num_layers, dropout=dropout, activation=activation, in_edge_features=self.in_edge_features, return_edge_emb=self.return_edge_emb, aggregation=aggregation)
         else:
             raise ValueError("Block type not supported")
@@ -72,6 +78,7 @@ class ComposerClassificationModelLightning(LightningModule):
         self.hidden_features = hidden_features
         self.output_features = output_features
         self.use_wandb = kwargs.get("use_wandb", False)
+        self.mixed_features = kwargs.get("mixed_features", False)
         self.module = ComposerClassificationModel(input_features, hidden_features, output_features, num_layers,
                                                   activation=activation, dropout=dropout,
                                                   use_reledge=use_reledge, metrical=metrical, **kwargs)
@@ -146,6 +153,9 @@ class ComposerClassificationModelLightning(LightningModule):
                 edge_features = edge_features if self.use_signed_features else torch.abs(edge_features)
                 edge_features = F.normalize(edge_features, dim=0)
                 edge_feature_dict[k] = edge_features
+                if self.mixed_features:
+                    m_feats = torch.abs(batch["note"].x[edges[1]] - batch["note"].x[edges[0]])
+                    edge_feature_dict[k] = torch.cat([edge_feature_dict[k], m_feats], dim=1)
         else:
             for k, edges in edge_index_dict.items():
                 edge_feature_dict[k] = None

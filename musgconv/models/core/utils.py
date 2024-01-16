@@ -1,7 +1,7 @@
 import torch
 from torch.nn import functional as F
 import random
-from torch_geometric.nn import SAGEConv, GATConv, ResGatedGraphConv
+from torch_geometric.nn import SAGEConv, GATConv, ResGatedGraphConv, EdgeConv
 import torch.nn as nn
 from musgconv.models.core.hgnn import HeteroMusGConv
 
@@ -178,6 +178,44 @@ class GATEncoder(nn.Module):
         if n_layers > 1:
             for i in range(n_layers - 1):
                 self.layers.append(GATConv(out_channels, out_channels, aggr="sum"))
+        self.dropout = nn.Dropout(dropout)
+        self.activation = activation
+
+    def reset_parameters(self):
+        for conv in self.layers:
+            conv.reset_parameters()
+
+    def forward(self, x, edge_index, edge_feature, **kwargs):
+        for conv in self.layers[:-1]:
+            x = conv(x, edge_index)
+            x = self.activation(x)
+            x = F.normalize(x, dim=-1)
+            x = self.dropout(x)
+        x = self.layers[-1](x, edge_index)
+        return x
+
+
+class EdgeConvEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels, n_layers=2, dropout=0.5, activation=F.relu, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        mlp = nn.Sequential(
+            nn.Linear(2*in_channels, out_channels),
+            nn.ReLU(),
+            nn.BatchNorm1d(out_channels),
+            nn.Linear(out_channels, out_channels),
+        )
+        self.layers.append(EdgeConv(mlp, aggr="add"))
+        if n_layers > 1:
+            for i in range(n_layers - 1):
+                mlp = nn.Sequential(
+                    nn.Linear(2*out_channels, out_channels),
+                    nn.ReLU(),
+                    nn.BatchNorm1d(out_channels),
+                    nn.Linear(out_channels, out_channels),
+                )
+                self.layers.append(EdgeConv(mlp,
+                    aggr="add"))
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
 

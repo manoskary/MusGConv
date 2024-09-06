@@ -120,6 +120,16 @@ All experiments are logged with WANDB so if you want to log the experiments you 
 python ./experiments/cadet.py --use_wandb --wandb_entity <your_wandb_entity>
 ```
 
+## Cite
+```bibtex
+@inproceedings{karystinaios2024musgconv,
+  title={Perception-Inspired Graph Convolution for Music Understanding Tasks},
+  author={Karystinaios, Emmanouil and Foscarin, Francesco and Widmer, Gerhard},
+  booktitle={Proceedings of the 33rd International Joint Conference on Artificial Intelligence (IJCAI)},
+  year={2024}
+}
+```
+
 
 ## Aknowledgements
 

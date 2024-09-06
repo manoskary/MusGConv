@@ -1,3 +1,9 @@
+[![Python](https://img.shields.io/badge/-Python_3.9+-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Pytorch](https://img.shields.io/badge/PyTorch_2.0+-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/get-started/locally/)
+[![Paper](http://img.shields.io/badge/paper-arxiv.2405.09224-B31B1B.svg)](https://arxiv.org/abs/2405.09224)
+[![Conference](http://img.shields.io/badge/IJCAI-2024-4b44ce.svg)](https://ijcai24.org/ai-arts-creativity-special-track-accepted-papers/)
+
+
 # MusGConv: Music-informed Graph Convolutions 
 
 This package contains implementation of the paper _Perception-Inspired Graph Convolution for Music Understanding Tasks_
